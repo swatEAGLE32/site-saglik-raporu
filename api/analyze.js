@@ -1,5 +1,4 @@
 export default async function handler(req, res) {
-  // Sadece POST kabul et
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -9,22 +8,16 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Geçersiz hostname' });
   }
 
-  // Basit hostname doğrulama
-  const hostRegex = /^[a-zA-Z0-9][a-zA-Z0-9\-\.]{0,253}[a-zA-Z0-9]$/;
-  if (!hostRegex.test(hostname)) {
-    return res.status(400).json({ error: 'Geçersiz hostname formatı' });
-  }
-
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    return res.status(500).json({ error: 'Sunucu yapılandırma hatası' });
+    return res.status(500).json({ error: 'API key eksik — Environment Variables kontrol edin' });
   }
 
   const systemPrompt = `Sen bir web site teknik analiz uzmanısın. Kullanıcı sana bir domain adı verir, sen o domain hakkında gerçekçi bir teknik analiz JSON'u üretirsin. SADECE geçerli JSON döndür — başka hiçbir şey yazma, markdown kullanma, açıklama yapma.`;
 
   const userPrompt = `Domain: ${hostname}
 
-Aşağıdaki JSON şemasını doldur. Tüm değerler Türkçe olsun. Gerçekçi ol — çoğu KOBİ sitesi eksik güvenlik başlıklarına, yavaş hıza ve mobil sorunlara sahip.
+Aşağıdaki JSON şemasını doldur. Tüm değerler Türkçe olsun. Gerçekçi ol.
 
 {
   "firma_adi": "string",
@@ -63,9 +56,7 @@ Aşağıdaki JSON şemasını doldur. Tüm değerler Türkçe olsun. Gerçekçi 
   "oncelikler": [
     {"oncelik": "Yüksek|Orta|Düşük", "is": "string", "etki": "string", "sure": "string"}
   ]
-}
-
-teknoloji array için: WordPress, PHP, jQuery, Google Analytics, Cloudflare, SSL/HTTPS, CDN, React/Vue/Angular değerlendir.`;
+}`;
 
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -83,21 +74,31 @@ teknoloji array için: WordPress, PHP, jQuery, Google Analytics, Cloudflare, SSL
       })
     });
 
+    // Hata durumunda tam mesajı döndür
     if (!response.ok) {
-      const err = await response.text();
-      console.error('Anthropic API hatası:', err);
-      return res.status(502).json({ error: 'Analiz servisi geçici olarak kullanılamıyor' });
+      const errText = await response.text();
+      console.error('Anthropic API hatası:', response.status, errText);
+      return res.status(502).json({ 
+        error: `API hatası ${response.status}: ${errText}` 
+      });
     }
 
     const data = await response.json();
     const raw = data.content.map(i => i.text || '').join('');
     const clean = raw.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '').trim();
-    const parsed = JSON.parse(clean);
+    
+    let parsed;
+    try {
+      parsed = JSON.parse(clean);
+    } catch (parseErr) {
+      console.error('JSON parse hatası:', parseErr, 'Raw:', raw);
+      return res.status(500).json({ error: 'JSON parse hatası: ' + parseErr.message });
+    }
 
     return res.status(200).json(parsed);
 
   } catch (err) {
-    console.error('Handler hatası:', err);
-    return res.status(500).json({ error: 'Sunucu hatası: ' + err.message });
+    console.error('Fetch hatası:', err);
+    return res.status(500).json({ error: 'Bağlantı hatası: ' + err.message });
   }
 }
