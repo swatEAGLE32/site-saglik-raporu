@@ -9,14 +9,8 @@ module.exports = async function handler(req, res) {
   }
 
   const apiKey = (process.env.ANTHROPIC_API_KEY || '').trim();
-  if (!apiKey) {
-    return res.status(500).json({ error: 'API key eksik — Environment Variables kontrol edin' });
-  }
-
-  // Unicode karakter kontrolü (API key'de sadece ASCII olmalı)
-  if (!/^[A-Za-z0-9_-]+$/.test(apiKey)) {
-    console.error('API Key Unicode karakter içeriyor');
-    return res.status(500).json({ error: 'API key geçersiz — Vercel\'de yeniden kontrol et (kopyala-yapıştırda hata olabilir)' });
+  if (!apiKey || apiKey.length < 10) {
+    return res.status(500).json({ error: 'API key eksik veya geçersiz — Vercel\'de kontrol et' });
   }
 
   const systemPrompt = `Sen bir web site teknik analiz uzmanısın. Kullanıcı sana bir domain adı verir, sen o domain hakkında gerçekçi bir teknik analiz JSON'u üretirsin. SADECE geçerli JSON döndür — başka hiçbir şey yazma, markdown kullanma, açıklama yapma.`;
