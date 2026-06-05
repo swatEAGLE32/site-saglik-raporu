@@ -1,3 +1,58 @@
+const https = require('https');
+const url = require('url');
+
+function getSiteData(hostname) {
+  return new Promise((resolve) => {
+    const targetUrl = hostname.startsWith('http') ? hostname : `https://${hostname}`;
+    const parsedUrl = url.parse(targetUrl);
+
+    const options = {
+      hostname: parsedUrl.hostname,
+      port: 443,
+      path: parsedUrl.path || '/',
+      method: 'GET',
+      timeout: 5000,
+      rejectUnauthorized: false,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (SiteSağlıkAnaliz/1.0)'
+      }
+    };
+
+    const req = https.request(options, (res) => {
+      const cert = res.socket.getPeerCertificate(true);
+      let html = '';
+      res.on('data', (chunk) => {
+        if (html.length < 30000) html += chunk;
+      });
+      res.on('end', () => {
+        resolve({
+          headers: res.headers,
+          cert: cert && cert.subject ? {
+            subject: cert.subject,
+            issuer: cert.issuer,
+            valid_from: cert.valid_from,
+            valid_to: cert.valid_to,
+            bits: cert.bits
+          } : null,
+          html: html.substring(0, 20000), // Claude için yeterli
+          statusCode: res.statusCode
+        });
+      });
+    });
+
+    req.on('error', (e) => {
+      resolve({ error: e.message });
+    });
+
+    req.on('timeout', () => {
+      req.destroy();
+      resolve({ error: 'Timeout' });
+    });
+
+    req.end();
+  });
+}
+
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -13,16 +68,27 @@ module.exports = async function handler(req, res) {
     return res.status(500).json({ error: 'API key eksik veya geçersiz — Vercel\'de kontrol et' });
   }
 
-  const systemPrompt = `Sen bir web site teknik analiz uzmanısın. Kullanıcı sana bir domain adı verir, sen o domain hakkında gerçekçi bir teknik analiz JSON'u üretirsin. SADECE geçerli JSON döndür — başka hiçbir şey yazma, markdown kullanma, açıklama yapma.`;
+  // Gerçek veri toplama
+  const siteData = await getSiteData(hostname);
+
+  const systemPrompt = `Sen bir web site teknik analiz uzmanısın. Sana bir domain adı ve o siteden toplanan gerçek veriler (headerlar, SSL bilgisi, HTML özeti) verilecek. Bu verileri kullanarak profesyonel, dürüst ve derinlemesine bir analiz yapmalısın. SADECE geçerli JSON döndür.`;
 
   const userPrompt = `Domain: ${hostname}
+Gerçek Veriler:
+${JSON.stringify(siteData, null, 2)}
 
-Aşağıdaki JSON şemasını doldur. Tüm değerler Türkçe olsun. Gerçekçi ol.
+Aşağıdaki JSON şemasını doldur. Tüm değerler Türkçe olsun.
+ÖNEMLİ:
+1. Rakip analizi kısmında bu sektördeki 3 gerçek rakibi bul ve karşılaştır.
+2. Sosyal medya kısmında sitenin eksiklerini ve yapması gerekenleri belirt.
+3. Güvenlik kısmında SSL, headerlar ve HTML'deki olası açıkları (XSS riskleri, eski kütüphaneler vb.) incele.
+4. "kurumsal_eksikler" kısmında (telefon, adres, mail, KVKK, SSL vb.) nelerin eksik olduğunu belirt.
 
 {
   "firma_adi": "string",
   "genel_puan": number,
   "ozet_metin": "string",
+  "kurumsal_eksikler": ["string"],
   "guvenlik_basliklari": {
     "csp": {"durum": "var|yok|eksik", "aciklama": "string"},
     "hsts": {"durum": "var|yok|eksik", "aciklama": "string"},
@@ -30,6 +96,12 @@ Aşağıdaki JSON şemasını doldur. Tüm değerler Türkçe olsun. Gerçekçi 
     "x_content_type": {"durum": "var|yok|eksik", "aciklama": "string"},
     "referrer_policy": {"durum": "var|yok|eksik", "aciklama": "string"},
     "permissions_policy": {"durum": "var|yok|eksik", "aciklama": "string"}
+  },
+  "ssl_detay": {
+    "gecerli": boolean,
+    "yayinci": "string",
+    "bitis_tarihi": "string",
+    "oneri": "string"
   },
   "performans": {
     "mobil_skor": number,
@@ -46,6 +118,19 @@ Aşağıdaki JSON şemasını doldur. Tüm değerler Türkçe olsun. Gerçekçi 
   "teknoloji": [
     {"ad": "string", "kategori": "string", "var": true}
   ],
+  "rakip_analizi": [
+    {
+      "rakip_ad": "string",
+      "puan": number,
+      "farklar": "string",
+      "ustun_yanlar": ["string"]
+    }
+  ],
+  "sosyal_medya_stratejisi": {
+    "mevcut_durum": "string",
+    "oneriler": ["string"],
+    "platformlar": ["string"]
+  },
   "kategoriler": [
     {"ad": "Sayfa Hızı", "puan": number, "ozet": "string", "bulgular": [{"tip":"iyi|uyari|hata","metin":"string"}], "aksiyonlar": ["string"]},
     {"ad": "SEO Temelleri", "puan": number, "ozet": "string", "bulgular": [{"tip":"iyi|uyari|hata","metin":"string"}], "aksiyonlar": ["string"]},
@@ -68,19 +153,15 @@ Aşağıdaki JSON şemasını doldur. Tüm değerler Türkçe olsun. Gerçekçi 
       },
       body: JSON.stringify({
         model: 'claude-3-5-sonnet-20241022',
-        max_tokens: 2000,
+        max_tokens: 3000,
         system: systemPrompt,
         messages: [{ role: 'user', content: userPrompt }]
       })
     });
 
-    // Hata durumunda tam mesajı döndür
     if (!response.ok) {
       const errText = await response.text();
-      console.error('Anthropic API hatası:', response.status, errText);
-      return res.status(502).json({ 
-        error: `API hatası ${response.status}: ${errText}` 
-      });
+      return res.status(502).json({ error: `API hatası ${response.status}: ${errText}` });
     }
 
     const data = await response.json();
@@ -90,15 +171,14 @@ Aşağıdaki JSON şemasını doldur. Tüm değerler Türkçe olsun. Gerçekçi 
     let parsed;
     try {
       parsed = JSON.parse(clean);
-    } catch (parseErr) {
-      console.error('JSON parse hatası:', parseErr, 'Raw:', raw);
-      return res.status(500).json({ error: 'JSON parse hatası: ' + parseErr.message });
+    } catch (pe) {
+      // JSON parse hatası durumunda Claude'dan gelen ham metni logla ve hata dön
+      console.error('JSON Parse Error:', pe, 'Raw content:', raw);
+      return res.status(500).json({ error: 'Analiz sonuçları işlenirken bir hata oluştu (JSON Parse).' });
     }
-
     return res.status(200).json(parsed);
 
   } catch (err) {
-    console.error('Fetch hatası:', err);
-    return res.status(500).json({ error: 'Bağlantı hatası: ' + err.message });
+    return res.status(500).json({ error: 'İşlem hatası: ' + err.message });
   }
 }
