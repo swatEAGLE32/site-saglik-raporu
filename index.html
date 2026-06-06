@@ -606,9 +606,10 @@ systemDark.addEventListener('change', e => {
   }
 });
 
-// SUPABASE CONFIG (Placeholder - replaced by actual config in production)
-const SB_URL = "https://your-project.supabase.co";
-const SB_KEY = "your-anon-key";
+// SUPABASE CONFIG
+// URL ve KEY değerleri Vercel ortam değişkenlerinden veya window._env nesnesinden alınabilir.
+const SB_URL = window._env?.SUPABASE_URL || "https://your-project.supabase.co";
+const SB_KEY = window._env?.SUPABASE_ANON_KEY || "your-anon-key";
 var supabase = window.supabase ? window.supabase.createClient(SB_URL, SB_KEY) : null;
 
 var D=null, openIdx=null, currentMode='single', currentUser=null;
@@ -1249,9 +1250,10 @@ async function sendReport(){
     const r = await fetch('/api/send-email', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ email, reportUrl: window.location.href })
+      body: JSON.stringify({ email, reportUrl: window.location.href, domain: D?.site_url })
     });
     const res = await r.json();
+    if (res.error) throw new Error(res.error);
     alert(res.message);
   } catch(e) { alert('Hata: ' + e.message); }
   btn.disabled = false; btn.textContent = 'Raporu Gönder';
