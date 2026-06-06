@@ -1,147 +1,177 @@
 const https = require('https');
+const http = require('http');
 const url = require('url');
+const dns = require('dns').promises;
 
-function getSiteData(hostname) {
-  return new Promise((resolve) => {
-    const targetUrl = hostname.startsWith('http') ? hostname : `https://${hostname}`;
-    const parsedUrl = url.parse(targetUrl);
-    
-    const options = {
-      hostname: parsedUrl.hostname,
-      port: 443,
-      path: parsedUrl.path || '/',
-      method: 'GET',
-      timeout: 5000,
-      rejectUnauthorized: false,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (SiteSağlıkAnaliz/1.0)'
-      }
-    };
+async function getSiteData(hostname) {
+  const targetUrl = hostname.startsWith('http') ? hostname : `https://${hostname}`;
+  const parsedUrl = url.parse(targetUrl);
+  const results = {
+    url: targetUrl,
+    hostname: parsedUrl.hostname,
+    headers: {},
+    cert: null,
+    html: '',
+    statusCode: null,
+    dns: {},
+    files: { robots: false, sitemap: false },
+    security: {
+      cookies: [],
+      cors: null
+    },
+    location: null,
+    links: [],
+    images: []
+  };
 
-    const req = https.request(options, (res) => {
-      const cert = res.socket.getPeerCertificate(true);
-      let html = '';
-      res.on('data', (chunk) => {
-        if (html.length < 30000) html += chunk;
-      });
-      res.on('end', () => {
-        resolve({
-          headers: res.headers,
-          cert: cert && cert.subject ? {
+  // DNS Lookup
+  try {
+    results.dns.a = await dns.resolve4(parsedUrl.hostname).catch(() => []);
+    results.dns.mx = await dns.resolveMx(parsedUrl.hostname).catch(() => []);
+    results.dns.txt = await dns.resolveTxt(parsedUrl.hostname).catch(() => []);
+  } catch (e) {}
+
+  // Main Request
+  try {
+    const mainReq = await new Promise((resolve) => {
+      const options = {
+        hostname: parsedUrl.hostname,
+        port: parsedUrl.protocol === 'https:' ? 443 : 80,
+        path: parsedUrl.path || '/',
+        method: 'GET',
+        timeout: 6000,
+        rejectUnauthorized: false,
+        headers: { 'User-Agent': 'Mozilla/5.0 (SiteSağlıkAnaliz/1.1)' }
+      };
+
+      const client = parsedUrl.protocol === 'https:' ? https : http;
+      const req = client.request(options, (res) => {
+        results.headers = res.headers;
+        results.statusCode = res.statusCode;
+        results.security.cookies = res.headers['set-cookie'] || [];
+        results.security.cors = res.headers['access-control-allow-origin'] || 'Yok';
+        
+        if (parsedUrl.protocol === 'https:') {
+          const cert = res.socket.getPeerCertificate(true);
+          results.cert = cert && cert.subject ? {
             subject: cert.subject,
             issuer: cert.issuer,
             valid_from: cert.valid_from,
-            valid_to: cert.valid_to,
-            bits: cert.bits
-          } : null,
-          html: html.substring(0, 20000), // Claude için yeterli
-          statusCode: res.statusCode
-        });
+            valid_to: cert.valid_to
+          } : null;
+        }
+
+        let body = '';
+        res.on('data', (chunk) => { if (body.length < 50000) body += chunk; });
+        res.on('end', () => resolve(body));
       });
+      req.on('error', () => resolve(''));
+      req.on('timeout', () => { req.destroy(); resolve(''); });
+      req.end();
     });
+    results.html = mainReq;
+  } catch (e) {}
 
-    req.on('error', (e) => {
-      resolve({ error: e.message });
-    });
-    
-    req.on('timeout', () => {
-      req.destroy();
-      resolve({ error: 'Timeout' });
-    });
+  // Parse HTML for images and links
+  if (results.html) {
+    const imgRegex = /<img[^>]+src=["']([^"']+)["'][^>]*>/gi;
+    let match;
+    while ((match = imgRegex.exec(results.html)) !== null && results.images.length < 10) {
+      const tag = match[0];
+      const src = match[1];
+      const altMatch = tag.match(/alt=["']([^"']*)["']/i);
+      results.images.push({
+        src,
+        alt: altMatch ? altMatch[1] : null,
+        isWebp: src.toLowerCase().endsWith('.webp')
+      });
+    }
 
-    req.end();
-  });
+    const linkRegex = /<a[^>]+href=["']([^"']+)["'][^>]*>/gi;
+    while ((match = linkRegex.exec(results.html)) !== null && results.links.length < 10) {
+      results.links.push(match[1]);
+    }
+  }
+
+  // Check robots.txt & sitemap
+  try {
+    const checkFile = (path) => new Promise(r => {
+      const fullUrl = `${parsedUrl.protocol}//${parsedUrl.hostname}${path}`;
+      const client = parsedUrl.protocol === 'https:' ? https : http;
+      const req = client.get(fullUrl, { timeout: 3000 }, (res) => {
+        r(res.statusCode === 200);
+      });
+      req.on('error', () => r(false));
+      req.on('timeout', () => { req.destroy(); r(false); });
+      req.end();
+    });
+    results.files.robots = await checkFile('/robots.txt');
+    results.files.sitemap = await checkFile('/sitemap.xml');
+  } catch (e) {}
+
+  return results;
 }
 
 module.exports = async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { hostname } = req.body;
-  if (!hostname || typeof hostname !== 'string' || hostname.length > 200) {
-    return res.status(400).json({ error: 'Geçersiz hostname' });
-  }
+  const { hostname, rival_hostname } = req.body;
+  if (!hostname) return res.status(400).json({ error: 'Geçersiz hostname' });
 
   const apiKey = (process.env.ANTHROPIC_API_KEY || '').trim();
-  if (!apiKey || apiKey.length < 10) {
-    return res.status(500).json({ error: 'API key eksik veya geçersiz — Vercel\'de kontrol et' });
-  }
+  if (!apiKey) return res.status(500).json({ error: 'API key eksik' });
 
-  // Gerçek veri toplama
   const siteData = await getSiteData(hostname);
 
-  const systemPrompt = `Sen bir web site teknik analiz uzmanısın. Sana bir domain adı ve o siteden toplanan gerçek veriler (headerlar, SSL bilgisi, HTML özeti) verilecek. Bu verileri kullanarak profesyonel, dürüst ve derinlemesine bir analiz yapmalısın. SADECE geçerli JSON döndür.`;
-
-  const userPrompt = `Domain: ${hostname}
-Gerçek Veriler:
-${JSON.stringify(siteData, null, 2)}
-
-Aşağıdaki JSON şemasını doldur. Tüm değerler Türkçe olsun. 
-ÖNEMLİ: 
-1. Rakip analizi kısmında bu sektördeki 3 gerçek rakibi bul ve karşılaştır.
-2. Sosyal medya kısmında sitenin eksiklerini ve yapması gerekenleri belirt.
-3. Güvenlik kısmında SSL, headerlar ve HTML'deki olası açıkları (XSS riskleri, eski kütüphaneler vb.) incele.
-4. "kurumsal_eksikler" kısmında (telefon, adres, mail, KVKK, SSL vb.) nelerin eksik olduğunu belirt.
-
-{
-  "firma_adi": "string",
-  "genel_puan": number,
-  "ozet_metin": "string",
-  "kurumsal_eksikler": ["string"],
-  "guvenlik_basliklari": {
-    "csp": {"durum": "var|yok|eksik", "aciklama": "string"},
-    "hsts": {"durum": "var|yok|eksik", "aciklama": "string"},
-    "x_frame": {"durum": "var|yok|eksik", "aciklama": "string"},
-    "x_content_type": {"durum": "var|yok|eksik", "aciklama": "string"},
-    "referrer_policy": {"durum": "var|yok|eksik", "aciklama": "string"},
-    "permissions_policy": {"durum": "var|yok|eksik", "aciklama": "string"}
-  },
-  "ssl_detay": {
-    "gecerli": boolean,
-    "yayinci": "string",
-    "bitis_tarihi": "string",
-    "oneri": "string"
-  },
-  "performans": {
-    "mobil_skor": number,
-    "masaustu_skor": number,
-    "lcp": "string",
-    "fcp": "string",
-    "cls": "string",
-    "speed_index": "string",
-    "lcp_durum": "iyi|orta|kotu",
-    "fcp_durum": "iyi|orta|kotu",
-    "cls_durum": "iyi|orta|kotu",
-    "si_durum": "iyi|orta|kotu"
-  },
-  "teknoloji": [
-    {"ad": "string", "kategori": "string", "var": true}
-  ],
-  "rakip_analizi": [
-    {
-      "rakip_ad": "string",
-      "puan": number,
-      "farklar": "string",
-      "ustun_yanlar": ["string"]
-    }
-  ],
-  "sosyal_medya_stratejisi": {
-    "mevcut_durum": "string",
-    "oneriler": ["string"],
-    "platformlar": ["string"]
-  },
-  "kategoriler": [
-    {"ad": "Sayfa Hızı", "puan": number, "ozet": "string", "bulgular": [{"tip":"iyi|uyari|hata","metin":"string"}], "aksiyonlar": ["string"]},
-    {"ad": "SEO Temelleri", "puan": number, "ozet": "string", "bulgular": [{"tip":"iyi|uyari|hata","metin":"string"}], "aksiyonlar": ["string"]},
-    {"ad": "Mobil Uyumluluk", "puan": number, "ozet": "string", "bulgular": [{"tip":"iyi|uyari|hata","metin":"string"}], "aksiyonlar": ["string"]},
-    {"ad": "Güvenlik", "puan": number, "ozet": "string", "bulgular": [{"tip":"iyi|uyari|hata","metin":"string"}], "aksiyonlar": ["string"]},
-    {"ad": "İçerik & Kullanılabilirlik", "puan": number, "ozet": "string", "bulgular": [{"tip":"iyi|uyari|hata","metin":"string"}], "aksiyonlar": ["string"]}
-  ],
-  "oncelikler": [
-    {"oncelik": "Yüksek|Orta|Düşük", "is": "string", "etki": "string", "sure": "string"}
-  ]
-}`;
+  const systemPrompt = `Sen kapsamlı bir web site analiz uzmanısın. SADECE JSON döndür.`;
+  const userPrompt = `Aşağıdaki verileri analiz et ve detaylı bir JSON raporu oluştur.
+  Veriler: ${JSON.stringify(siteData)}
+  ${rival_hostname ? `KIYASLAMA MODU: Lütfen bu siteyi özellikle ${rival_hostname} ile kıyasla.` : ''}
+  
+  Gereksinimler:
+  1. "guvenlik_basliklari" kısmında her başlık için durum (var|eksik|yok) ve aciklama yaz.
+  2. "performans" kısmında skorlar ve durumlar (iyi|orta|riskli) olmalı.
+  3. "teknoloji" kısmında tespit ettiğin dilleri/araçları listele.
+  4. "rakip_analizi": 3 gerçek rakip.
+  5. "kurumsal_eksikler": Sitede eksik olan kurumsal öğeler.
+  6. "ssl_detay": SSL verisinden yola çıkarak dürüst bir özet.
+  
+  JSON Şeması (BU ŞEMAYA KESİNLİKLE UY):
+  {
+    "firma_adi": "",
+    "genel_puan": 0,
+    "ozet_metin": "",
+    "site_url": "${hostname}",
+    "kurumsal_eksikler": ["Telefon", "KVKK Metni", "..."],
+    "guvenlik_basliklari": {
+      "csp": {"durum": "yok", "aciklama": ""},
+      "hsts": {"durum": "yok", "aciklama": ""},
+      "x_frame": {"durum": "yok", "aciklama": ""},
+      "x_content_type": {"durum": "yok", "aciklama": ""},
+      "referrer_policy": {"durum": "yok", "aciklama": ""},
+      "permissions_policy": {"durum": "yok", "aciklama": ""}
+    },
+    "guvenlik_detay": { "cookie_security": "Güvenli|Riskli" },
+    "teknik_analiz": {
+      "dns": {"a": [], "mx": [], "txt": []},
+      "files": {"robots": true, "sitemap": false},
+      "framework": "",
+      "ip_lokasyon": ""
+    },
+    "performans": { 
+      "mobil_skor": 0, "masaustu_skor": 0, 
+      "lcp": "1.2s", "lcp_durum": "iyi", 
+      "fcp": "0.8s", "fcp_durum": "iyi", 
+      "cls": "0.01", "cls_durum": "iyi", 
+      "speed_index": "2.1s", "si_durum": "iyi" 
+    },
+    "teknoloji": [{"ad": "React", "var": true, "kategori": "Frontend"}],
+    "ssl_detay": { "gecerli": true, "yayinci": "", "bitis_tarihi": "", "oneri": "" },
+    "rakip_analizi": [{"rakip_ad": "", "puan": 0, "farklar": "", "ustun_yanlar": []}],
+    "sosyal_medya_stratejisi": {"mevcut_durum": "", "oneriler": [], "platformlar": []},
+    "kategoriler": [{"ad": "Güvenlik", "puan": 0, "ozet": "", "bulgular": [{"tip":"iyi|uyari|hata", "metin":""}], "aksiyonlar": []}],
+    "oncelikler": [{"oncelik": "Yüksek|Orta|Düşük", "is": "", "etki": "", "sure": ""}]
+  }`;
 
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -153,32 +183,31 @@ Aşağıdaki JSON şemasını doldur. Tüm değerler Türkçe olsun.
       },
       body: JSON.stringify({
         model: 'claude-3-5-sonnet-20241022',
-        max_tokens: 3000,
+        max_tokens: 4000,
         system: systemPrompt,
         messages: [{ role: 'user', content: userPrompt }]
       })
     });
 
-    if (!response.ok) {
-      const errText = await response.text();
-      return res.status(502).json({ error: `API hatası ${response.status}: ${errText}` });
-    }
-
     const data = await response.json();
+    if (data.error) throw new Error(data.error.message);
     const raw = data.content.map(i => i.text || '').join('');
     const clean = raw.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '').trim();
+    const finalJson = JSON.parse(clean);
     
-    let parsed;
-    try {
-      parsed = JSON.parse(clean);
-    } catch (pe) {
-      // JSON parse hatası durumunda Claude'dan gelen ham metni logla ve hata dön
-      console.error('JSON Parse Error:', pe, 'Raw content:', raw);
-      return res.status(500).json({ error: 'Analiz sonuçları işlenirken bir hata oluştu (JSON Parse).' });
+    // Ensure critical fields from siteData are preserved if LLM misses them
+    finalJson.site_url = hostname;
+    if (!finalJson.teknik_analiz.dns.a.length) finalJson.teknik_analiz.dns = siteData.dns;
+    finalJson.teknik_analiz.files = siteData.files;
+    
+    if (siteData.cert && !finalJson.ssl_detay.yayinci) {
+      finalJson.ssl_detay.gecerli = true;
+      finalJson.ssl_detay.yayinci = siteData.cert.issuer.O || siteData.cert.issuer.CN;
+      finalJson.ssl_detay.bitis_tarihi = siteData.cert.valid_to;
     }
-    return res.status(200).json(parsed);
 
+    return res.status(200).json(finalJson);
   } catch (err) {
-    return res.status(500).json({ error: 'İşlem hatası: ' + err.message });
+    return res.status(500).json({ error: err.message });
   }
 }
