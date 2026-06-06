@@ -221,16 +221,31 @@ footer{border-top:1px solid var(--border);padding:20px 0;text-align:center;font-
 </header>
 
 <section class="hero">
-  <div class="hlbl">Web Performans Analizi</div>
+  <div class="hlbl">Web Site Sağlık Paneli</div>
   <h1>Sitenizin <em>gerçek</em><br>durumunu öğrenin.</h1>
-  <p class="hsub">URL girin — güvenlik başlıkları, Core Web Vitals, SEO ve teknoloji tespiti dahil tam rapor.</p>
+  <p class="hsub">Gelişmiş güvenlik, teknik SEO, DNS ve rakip analizi ile işletmenizi büyütün.</p>
 </section>
 
+<div style="margin-bottom: 20px; display: flex; gap: 10px;">
+  <button id="modeSingle" class="btan" style="background: var(--surface2); border: 1px solid var(--border); color: var(--text2);" onclick="setMode('single')">Tekli Analiz</button>
+  <button id="modeCompare" class="btan" style="background: var(--surface2); border: 1px solid var(--border); color: var(--text2);" onclick="setMode('compare')">Kıyaslama Modu</button>
+</div>
+
 <div class="icard">
-  <div class="ilbl">Web Site Adresi</div>
-  <div class="urow">
-    <input type="text" class="uin" id="urlIn" placeholder="www.firmaniz.com.tr" autocomplete="off" spellcheck="false"/>
-    <button class="btan" id="btnA" onclick="start()">Analiz Et</button>
+  <div id="singleInput">
+    <div class="ilbl">Web Site Adresi</div>
+    <div class="urow">
+      <input type="text" class="uin" id="urlIn" placeholder="www.firmaniz.com.tr" autocomplete="off" spellcheck="false"/>
+      <button class="btan" id="btnA" onclick="start()">Analiz Et</button>
+    </div>
+  </div>
+  <div id="compareInput" style="display: none;">
+    <div class="ilbl">Kıyaslanacak Web Siteleri</div>
+    <div class="urow" style="flex-direction: column; gap: 10px;">
+      <input type="text" class="uin" id="urlIn1" placeholder="Siteniz (örn: site1.com)" autocomplete="off"/>
+      <input type="text" class="uin" id="urlIn2" placeholder="Rakip (örn: rakip.com)" autocomplete="off"/>
+      <button class="btan" id="btnCompare" onclick="startCompare()">Kıyaslamayı Başlat</button>
+    </div>
   </div>
   <div class="emsg" id="emsg"></div>
   <div class="irow">
@@ -267,6 +282,11 @@ footer{border-top:1px solid var(--border);padding:20px 0;text-align:center;font-
   <div class="sttl mb24">Performans Metrikleri</div>
   <div class="mgrid" id="mGrid"></div>
 
+  <div id="techSection">
+    <div class="sttl mb24">Teknik ve DNS Analizi</div>
+    <div id="techGrid" class="hgrid" style="margin-bottom: 24px;"></div>
+  </div>
+
   <div class="sttl mb24">Teknoloji Tespiti</div>
   <div class="trow" id="tRow"></div>
 
@@ -290,6 +310,15 @@ footer{border-top:1px solid var(--border);padding:20px 0;text-align:center;font-
 
   <div class="sttl mb24" style="margin-top:6px">Öncelikli Aksiyonlar</div>
   <div id="priList"></div>
+
+  <div class="icard" style="background: var(--surface); border: 1px dashed var(--accent); text-align: center; margin-top: 40px;">
+    <div class="ilbl">Raporu Paylaş ve Sakla</div>
+    <div style="display: flex; gap: 10px; justify-content: center; margin-top: 15px;">
+      <input type="email" id="emailIn" class="uin" placeholder="E-posta adresiniz" style="max-width: 250px;"/>
+      <button class="btan" onclick="sendReport()" id="btnSend">Raporu Gönder</button>
+      <button class="btnnew" onclick="saveReport()" id="btnSave">Buluta Kaydet</button>
+    </div>
+  </div>
 
   <div class="pdfsec">
     <button class="btnpdf" id="btnPdf" onclick="genPDF()">
@@ -351,7 +380,15 @@ systemDark.addEventListener('change', e => {
   }
 });
 
-let D=null, openIdx=null;
+let D=null, openIdx=null, currentMode='single';
+
+function setMode(m){
+  currentMode = m;
+  document.getElementById('singleInput').style.display = m==='single'?'block':'none';
+  document.getElementById('compareInput').style.display = m==='compare'?'block':'none';
+  document.getElementById('modeSingle').style.borderColor = m==='single'?'var(--accent)':'var(--border)';
+  document.getElementById('modeCompare').style.borderColor = m==='compare'?'var(--accent)':'var(--border)';
+}
 const pC=p=>p>=80?'var(--green)':p>=60?'var(--yellow)':'var(--red)';
 const pCl=p=>p>=80?'g':p>=60?'m':'b';
 const pLb=p=>p>=80?'İYİ':p>=60?'ORTA':'KRİTİK';
@@ -384,9 +421,9 @@ function runProg(cb){
   },3600);
 }
 
-async function start(){
+async function start(hn_arg, rival_hn){
   hideE();
-  const hn=normUrl(document.getElementById('urlIn').value);
+  const hn = hn_arg || normUrl(document.getElementById('urlIn').value);
   if(!hn){showE('Lütfen geçerli bir adres girin. Örnek: www.firmaniz.com');return;}
   const btn=document.getElementById('btnA');
   btn.disabled=true;
@@ -399,7 +436,7 @@ async function start(){
   const apiCall=fetch('/api/analyze',{
     method:'POST',
     headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({hostname:hn})
+    body:JSON.stringify({hostname:hn, rival_hostname: rival_hn})
   }).then(async r=>{
     if(!r.ok){const t=await r.text();throw new Error(t);}
     return r.json();
@@ -430,6 +467,7 @@ function render(d){
   renderH(d.guvenlik_basliklari);
   renderM(d.performans);
   renderT(d.teknoloji);
+  renderTech(d.teknik_analiz, d.guvenlik_detay);
   renderCats(d.kategoriler);
   renderSSL(d.ssl_detay);
   renderCorp(d.kurumsal_eksikler);
@@ -582,6 +620,76 @@ function renderRivals(rs){
       </ul>
     `;
     g.appendChild(d);
+  });
+}
+
+async function startCompare(){
+  hideE();
+  const u1 = normUrl(document.getElementById('urlIn1').value);
+  const u2 = normUrl(document.getElementById('urlIn2').value);
+  if(!u1 || !u2){showE('Lütfen iki geçerli adres girin.'); return;}
+  
+  const btn = document.getElementById('btnCompare');
+  btn.disabled = true;
+  btn.textContent = 'Kıyaslanıyor...';
+  
+  // Kıyaslama mantığında iki ayrı analiz yapılıp sonuçlar birleştirilebilir.
+  // Şimdilik ana fonksiyonu u1 için çalıştırıp u2'yi "rakip" olarak prompt'a yedireceğiz.
+  // Bu demo için start() fonksiyonunun genişletilmiş halini simüle edeceğiz.
+  start(u1, u2);
+}
+
+async function saveReport(){
+  const btn = document.getElementById('btnSave');
+  btn.disabled = true; btn.textContent = 'Kaydediliyor...';
+  try {
+    const r = await fetch('/api/save-report', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ report: D, email: document.getElementById('emailIn').value })
+    });
+    const res = await r.json();
+    alert(res.message);
+  } catch(e) { alert('Hata: ' + e.message); }
+  btn.disabled = false; btn.textContent = 'Buluta Kaydet';
+}
+
+async function sendReport(){
+  const email = document.getElementById('emailIn').value;
+  if(!email){ alert('E-posta girin'); return; }
+  const btn = document.getElementById('btnSend');
+  btn.disabled = true; btn.textContent = '...';
+  try {
+    const r = await fetch('/api/send-email', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ email, reportUrl: window.location.href })
+    });
+    const res = await r.json();
+    alert(res.message);
+  } catch(e) { alert('Hata: ' + e.message); }
+  btn.disabled = false; btn.textContent = 'Raporu Gönder';
+}
+
+function renderTech(t, g){
+  const grid = document.getElementById('techGrid');
+  grid.innerHTML = '';
+  if(!t) return;
+  
+  const items = [
+    {n: 'Framework', v: t.framework || 'Tespit Edilemedi', s: 'Altyapı'},
+    {n: 'Sunucu Lokasyonu', v: t.ip_lokasyon || 'Bilinmiyor', s: 'Hosting'},
+    {n: 'Robots.txt', v: t.files?.robots ? 'VAR' : 'YOK', c: t.files?.robots?'hok':'hmiss'},
+    {n: 'Sitemap.xml', v: t.files?.sitemap ? 'VAR' : 'YOK', c: t.files?.sitemap?'hok':'hmiss'},
+    {n: 'DNS (A)', v: (t.dns?.a || []).join(', ') || 'Yok', s: 'IP Adresleri'},
+    {n: 'Cookie Güvenliği', v: g?.cookie_security || 'Riskli', c: g?.cookie_security==='Güvenli'?'hok':'hwarn'}
+  ];
+  
+  items.forEach(it => {
+    const d = document.createElement('div');
+    d.className = 'hitem';
+    d.innerHTML = `<div style="flex:1"><div class="ilbl">${it.s || 'Teknik'}</div><div style="font-size:13px; font-weight:600;">${it.n}</div><div style="font-size:11px; color:var(--text2)">${it.v}</div></div> ${it.c ? `<span class="hst ${it.c}">${it.v}</span>` : ''}`;
+    grid.appendChild(d);
   });
 }
 
