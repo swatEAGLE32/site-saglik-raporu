@@ -4,20 +4,58 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Site Sağlık Raporu</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
 :root {
-  --bg:#0A0A0F;--surface:#111118;--surface2:#18181F;--surface3:#1E1E28;
-  --border:#2A2A35;--border2:#333340;--border3:#3E3E50;
-  --text:#F0F0F8;--text2:#9090A8;--text3:#5A5A70;
-  --accent:#6C63FF;--accent2:#8B85FF;--accent-glow:rgba(108,99,255,0.15);
-  --green:#22C55E;--green-bg:rgba(34,197,94,0.08);--green-bd:rgba(34,197,94,0.2);
-  --yellow:#EAB308;--yellow-bg:rgba(234,179,8,0.08);--yellow-bd:rgba(234,179,8,0.2);
-  --red:#EF4444;--red-bg:rgba(239,68,68,0.08);--red-bd:rgba(239,68,68,0.2);
-  --fd:'Syne',sans-serif;--fb:'DM Sans',sans-serif;
+  /* Default Dark */
+  --bg: #0F172A;
+  --surface: #1E293B;
+  --surface2: #334155;
+  --surface3: #475569;
+  --border: #334155;
+  --border2: #475569;
+  --border3: #64748B;
+  --text: #E2E8F0;
+  --text2: #94A3B8;
+  --text3: #64748B;
+  --accent: #10B981;
+  --accent2: #34D399;
+  --accent-glow: rgba(16, 185, 129, 0.15);
+  --green: #10B981;
+  --green-bg: rgba(16, 185, 129, 0.08);
+  --green-bd: rgba(16, 185, 129, 0.2);
+  --yellow: #F59E0B;
+  --yellow-bg: rgba(245, 158, 11, 0.08);
+  --yellow-bd: rgba(245, 158, 11, 0.2);
+  --red: #EF4444;
+  --red-bg: rgba(239, 68, 68, 0.08);
+  --red-bd: rgba(239, 68, 68, 0.2);
+  --fd: 'Syne', sans-serif;
+  --fb: 'DM Sans', sans-serif;
 }
-*{box-sizing:border-box;margin:0;padding:0;}
+
+[data-theme="light"] {
+  --bg: #FFFFFF;
+  --surface: #F8FAFC;
+  --surface2: #F1F5F9;
+  --surface3: #E2E8F0;
+  --border: #E2E8F0;
+  --border2: #CBD5E1;
+  --border3: #94A3B8;
+  --text: #1E293B;
+  --text2: #475569;
+  --text3: #64748B;
+  --accent: #059669;
+  --accent2: #10B981;
+  --accent-glow: rgba(5, 150, 105, 0.1);
+  --green: #059669;
+  --green-bg: rgba(5, 150, 105, 0.05);
+  --green-bd: rgba(5, 150, 105, 0.15);
+}
+
+* {box-sizing: border-box; margin: 0; padding: 0;}
 body{background:var(--bg);color:var(--text);font-family:var(--fb);min-height:100vh;overflow-x:hidden;}
 body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(var(--border) 1px,transparent 1px),linear-gradient(90deg,var(--border) 1px,transparent 1px);background-size:60px 60px;opacity:.22;pointer-events:none;z-index:0;}
 .glow{position:fixed;width:700px;height:700px;background:radial-gradient(circle,rgba(108,99,255,.09) 0%,transparent 70%);border-radius:50%;top:-200px;left:-150px;pointer-events:none;z-index:0;}
@@ -173,7 +211,12 @@ footer{border-top:1px solid var(--border);padding:20px 0;text-align:center;font-
 <header>
   <div class="hdr">
     <div class="logo">site<span>sağlık</span>.analiz</div>
-    <div class="badge">BETA</div>
+    <div style="display: flex; align-items: center; gap: 12px;">
+      <button id="themeToggle" class="btnnew" style="margin:0; padding: 6px 12px; font-size: 11px;">
+        <span id="themeIcon">🌙</span> <span id="themeText">Koyu</span>
+      </button>
+      <div class="badge">BETA</div>
+    </div>
   </div>
 </header>
 
@@ -231,6 +274,20 @@ footer{border-top:1px solid var(--border);padding:20px 0;text-align:center;font-
   <div class="cgrid" id="cGrid"></div>
   <div id="dPanels"></div>
 
+  <div id="extraSections">
+    <div class="sttl mb24">SSL ve Sertifika Detayları</div>
+    <div id="sslInfo" class="icard" style="margin-bottom: 24px; background: var(--surface2);"></div>
+
+    <div class="sttl mb24">Kurumsal Eksikler</div>
+    <div id="corpMissing" class="trow" style="margin-bottom: 24px;"></div>
+
+    <div class="sttl mb24">Rakip Analizi & Karşılaştırma</div>
+    <div id="competitorGrid" class="cgrid" style="margin-bottom: 24px;"></div>
+
+    <div class="sttl mb24">Sosyal Medya Stratejisi</div>
+    <div id="socialStrategy" class="icard" style="margin-bottom: 24px; background: var(--surface2);"></div>
+  </div>
+
   <div class="sttl mb24" style="margin-top:6px">Öncelikli Aksiyonlar</div>
   <div id="priList"></div>
 
@@ -257,6 +314,43 @@ footer{border-top:1px solid var(--border);padding:20px 0;text-align:center;font-
 </div>
 
 <script>
+const themeToggle = document.getElementById('themeToggle');
+const themeIcon = document.getElementById('themeIcon');
+const themeText = document.getElementById('themeText');
+
+function setTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem('theme', theme);
+  if (theme === 'light') {
+    themeIcon.textContent = '☀️';
+    themeText.textContent = 'Açık';
+  } else {
+    themeIcon.textContent = '🌙';
+    themeText.textContent = 'Koyu';
+  }
+}
+
+themeToggle.addEventListener('click', () => {
+  const current = document.documentElement.getAttribute('data-theme');
+  setTheme(current === 'light' ? 'dark' : 'light');
+});
+
+// Auto detect system theme
+const savedTheme = localStorage.getItem('theme');
+const systemDark = window.matchMedia('(prefers-color-scheme: dark)');
+
+if (savedTheme) {
+  setTheme(savedTheme);
+} else {
+  setTheme(systemDark.matches ? 'dark' : 'light');
+}
+
+systemDark.addEventListener('change', e => {
+  if (!localStorage.getItem('theme')) {
+    setTheme(e.matches ? 'dark' : 'light');
+  }
+});
+
 let D=null, openIdx=null;
 const pC=p=>p>=80?'var(--green)':p>=60?'var(--yellow)':'var(--red)';
 const pCl=p=>p>=80?'g':p>=60?'m':'b';
@@ -337,6 +431,10 @@ function render(d){
   renderM(d.performans);
   renderT(d.teknoloji);
   renderCats(d.kategoriler);
+  renderSSL(d.ssl_detay);
+  renderCorp(d.kurumsal_eksikler);
+  renderRivals(d.rakip_analizi);
+  renderSocial(d.sosyal_medya_stratejisi);
   renderPri(d.oncelikler);
   document.getElementById('res').classList.add('on');
   setTimeout(()=>document.getElementById('res').scrollIntoView({behavior:'smooth',block:'start'}),100);
@@ -438,6 +536,70 @@ function togDet(i,k){
   else{c.classList.add('exp');p.classList.add('on');openIdx=i;p.scrollIntoView({behavior:'smooth',block:'nearest'});}
 }
 
+function renderSSL(s){
+  const g=document.getElementById('sslInfo');
+  if(!s){g.innerHTML='SSL bilgisi alınamadı.';return;}
+  g.innerHTML=`
+    <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:20px;">
+      <div>
+        <div class="ilbl">Durum</div>
+        <div style="font-weight:700;color:${s.gecerli?'var(--green)':'var(--red)'}">${s.gecerli?'GEÇERLİ':'GEÇERSİZ'}</div>
+        <div class="ilbl" style="margin-top:10px">Yayıncı</div>
+        <div style="font-size:14px">${s.yayinci}</div>
+      </div>
+      <div>
+        <div class="ilbl">Bitiş Tarihi</div>
+        <div style="font-size:14px">${s.bitis_tarihi}</div>
+        <div class="ilbl" style="margin-top:10px">Öneri</div>
+        <div style="font-size:13px;color:var(--text2)">${s.oneri}</div>
+      </div>
+    </div>
+  `;
+}
+
+function renderCorp(cs){
+  const r=document.getElementById('corpMissing');r.innerHTML='';
+  if(!cs||!cs.length){r.innerHTML='<span style="color:var(--green)">Tüm kurumsal öğeler tam görünüyor.</span>';return;}
+  cs.forEach(c=>{
+    const b=document.createElement('div');
+    b.className='tbadge';b.style.borderColor='var(--red-bd)';b.style.color='var(--red)';
+    b.innerHTML=`<span class="tdot" style="background:var(--red)"></span>${c}`;
+    r.appendChild(b);
+  });
+}
+
+function renderRivals(rs){
+  const g=document.getElementById('competitorGrid');g.innerHTML='';
+  (rs||[]).forEach(r=>{
+    const d=document.createElement('div');
+    d.className='ccard';
+    d.innerHTML=`
+      <div class="ctop"><div class="cnm">${r.rakip_ad}</div><div class="csc">${r.puan}</div></div>
+      <div class="coz" style="color:var(--text2); font-size: 11px;">${r.farklar}</div>
+      <div class="attl">Üstün Yanları</div>
+      <ul style="font-size:11px;color:var(--text3);padding-left:15px;margin-top:5px">
+        ${(r.ustun_yanlar||[]).map(u=>`<li>${u}</li>`).join('')}
+      </ul>
+    `;
+    g.appendChild(d);
+  });
+}
+
+function renderSocial(s){
+  const g=document.getElementById('socialStrategy');
+  if(!s){g.innerHTML='Veri yok.';return;}
+  g.innerHTML=`
+    <div class="coz" style="margin-bottom:15px"><strong>Mevcut Durum:</strong> ${s.mevcut_durum}</div>
+    <div class="attl">Stratejik Öneriler</div>
+    <div style="display:flex;flex-direction:column;gap:5px;margin-top:8px">
+      ${(s.oneriler||[]).map(o=>`<div class="aitem"><span class="anum">•</span><span>${o}</span></div>`).join('')}
+    </div>
+    <div class="irow" style="margin-top:15px">
+      ${(s.platformlar||[]).map(p=>`<span class="chip">#${p}</span>`).join('')}
+    </div>
+  `;
+}
+
 function renderPri(ps){
   const l=document.getElementById('priList');l.innerHTML='';
   (ps||[]).forEach(o=>{
@@ -448,13 +610,76 @@ function renderPri(ps){
   });
 }
 
-function genPDF(){
-  const b=document.getElementById('btnPdf');
-  b.innerHTML='<span class="spin"></span> Hazırlanıyor...';
-  setTimeout(()=>{
-    b.innerHTML=`<svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg> PDF Rapor İndir`;
-    alert('PDF: Python backend entegre edildiğinde otomatik oluşacak.\n\n'+D?.firma_adi+' — Genel puan: '+D?.genel_puan+'/100');
-  },1200);
+async function genPDF(){
+  if(!D) return;
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  const b = document.getElementById('btnPdf');
+  b.innerHTML = '<span class="spin"></span> Hazırlanıyor...';
+
+  try {
+    doc.setFontSize(22);
+    doc.setTextColor(16, 185, 129); // Accent color
+    doc.text('Site Sağlık Raporu', 20, 20);
+    
+    doc.setFontSize(10);
+    doc.setTextColor(100);
+    doc.text(new Date().toLocaleString('tr-TR'), 150, 20);
+    
+    doc.setDrawColor(200);
+    doc.line(20, 25, 190, 25);
+    
+    doc.setFontSize(16);
+    doc.setTextColor(0);
+    doc.text(`Firma: ${D.firma_adi}`, 20, 40);
+    doc.text(`URL: ${D.site_url}`, 20, 50);
+    
+    doc.setFontSize(30);
+    doc.setTextColor(D.genel_puan >= 80 ? 16 : D.genel_puan >= 60 ? 245 : 239, D.genel_puan >= 80 ? 185 : D.genel_puan >= 60 ? 158 : 68, D.genel_puan >= 80 ? 129 : D.genel_puan >= 60 ? 11 : 68);
+    doc.text(`${D.genel_puan}/100`, 150, 45);
+    
+    doc.setFontSize(12);
+    doc.setTextColor(50);
+    const splitText = doc.splitTextToSize(D.ozet_metin, 170);
+    doc.text(splitText, 20, 65);
+    
+    let y = 75 + (splitText.length * 5);
+    
+    // SSL
+    doc.setFontSize(14);
+    doc.setTextColor(0);
+    doc.text('Güvenlik ve SSL', 20, y);
+    doc.setFontSize(10);
+    doc.text(`SSL Durumu: ${D.ssl_detay?.gecerli ? 'Geçerli' : 'Geçersiz'}`, 25, y + 7);
+    doc.text(`Yayıncı: ${D.ssl_detay?.yayinci}`, 25, y + 12);
+    y += 25;
+    
+    // Eksikler
+    if (D.kurumsal_eksikler && D.kurumsal_eksikler.length) {
+      doc.setFontSize(14);
+      doc.text('Kurumsal Eksikler', 20, y);
+      doc.setFontSize(10);
+      D.kurumsal_eksikler.forEach((e, i) => {
+        doc.text(`• ${e}`, 25, y + 7 + (i * 5));
+      });
+      y += 15 + (D.kurumsal_eksikler.length * 5);
+    }
+    
+    // Öncelikler
+    doc.setFontSize(14);
+    doc.text('Öncelikli Aksiyonlar', 20, y);
+    doc.setFontSize(10);
+    D.oncelikler.slice(0, 5).forEach((o, i) => {
+      doc.text(`${i+1}. [${o.oncelik}] ${o.is} (${o.etki})`, 25, y + 7 + (i * 5));
+    });
+
+    doc.save(`site-saglik-raporu-${D.site_url}.pdf`);
+  } catch (err) {
+    console.error(err);
+    alert('PDF oluşturulurken hata oluştu.');
+  } finally {
+    b.innerHTML = `<svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg> PDF Rapor İndir`;
+  }
 }
 
 function reset(){
@@ -465,6 +690,7 @@ function reset(){
   for(let i=0;i<5;i++){const s=document.getElementById('s'+i);s.className='step';s.querySelector('.sico').textContent=i+1;}
   document.getElementById('pb').style.width='0%';
   openIdx=null;D=null;
+  ['sslInfo','corpMissing','competitorGrid','socialStrategy'].forEach(id=>document.getElementById(id).innerHTML='');
   window.scrollTo({top:0,behavior:'smooth'});
 }
 
