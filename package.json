@@ -1,5 +1,10 @@
 {
   "name": "site-saglik-raporu",
   "version": "1.0.0",
-  "description": "Web Site Health Report - Türkçe Teknik Analiz"
+  "description": "Web Site Health Report - Türkçe Teknik Analiz",
+  "main": "api/analyze.js",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.7",
+    "resend": "^3.1.0"
+  }
 }
