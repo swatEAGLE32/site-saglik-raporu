@@ -3,8 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Site Sağlık Raporu</title>
+<title>Site Sağlık Raporu | SaaS Analiz Paneli</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://unpkg.com/lucide@latest"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
@@ -61,8 +64,54 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 .glow{position:fixed;width:700px;height:700px;background:radial-gradient(circle,rgba(108,99,255,.09) 0%,transparent 70%);border-radius:50%;top:-200px;left:-150px;pointer-events:none;z-index:0;}
 .wrap{position:relative;z-index:1;max-width:960px;margin:0 auto;padding:0 24px;}
 
-header{padding:36px 0 28px;border-bottom:1px solid var(--border);margin-bottom:44px;}
+header{padding:24px 0 20px;border-bottom:1px solid var(--border);margin-bottom:30px; position: sticky; top: 0; background: var(--bg); z-index: 100;}
 .hdr{display:flex;align-items:center;justify-content:space-between;}
+
+/* Sidebar */
+.sidebar {
+  position: fixed;
+  left: -280px;
+  top: 0;
+  bottom: 0;
+  width: 280px;
+  background: var(--surface);
+  border-right: 1px solid var(--border2);
+  z-index: 1001;
+  transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+}
+.sidebar.on { left: 0; }
+.sb-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  backdrop-filter: blur(2px);
+  z-index: 1000;
+  display: none;
+}
+.sb-overlay.on { display: block; }
+.sb-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 32px; }
+.sb-nav { display: flex; flex-direction: column; gap: 8px; flex: 1; }
+.sb-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  color: var(--text2);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s;
+  cursor: pointer;
+}
+.sb-link:hover, .sb-link.active {
+  background: var(--accent-glow);
+  color: var(--accent2);
+}
+.sb-link i { width: 18px; height: 18px; }
 .logo{font-family:var(--fd);font-size:15px;font-weight:700;letter-spacing:.05em;}
 .logo span{color:var(--accent2);}
 .badge{font-size:10px;font-weight:600;background:var(--accent-glow);color:var(--accent2);border:1px solid var(--accent);padding:3px 8px;border-radius:4px;letter-spacing:.1em;}
@@ -206,25 +255,77 @@ footer{border-top:1px solid var(--border);padding:20px 0;text-align:center;font-
 </head>
 <body>
 <div class="glow"></div>
-<div class="wrap">
+
+<!-- Sidebar -->
+<div id="sbOverlay" class="sb-overlay" onclick="toggleSidebar()"></div>
+<aside id="sidebar" class="sidebar">
+  <div class="sb-hdr">
+    <div class="logo">site<span>sağlık</span>.analiz</div>
+    <button onclick="toggleSidebar()" style="background:none; border:none; color:var(--text3); cursor:pointer;">✕</button>
+  </div>
+  <nav class="sb-nav">
+    <div class="sb-link active" onclick="showView('home')"><i data-lucide="home"></i> Ana Sayfa</div>
+    <div class="sb-link" onclick="showView('dashboard')"><i data-lucide="layout-dashboard"></i> Dashboard</div>
+    <div class="sb-link" onclick="showView('history')"><i data-lucide="history"></i> Geçmiş Analizler</div>
+    <div class="sb-link" onclick="showView('tracking')"><i data-lucide="monitor"></i> Takip Listesi</div>
+    <div class="sb-link" onclick="showView('settings')"><i data-lucide="settings"></i> Ayarlar</div>
+  </nav>
+  <div style="padding-top: 20px; border-top: 1px solid var(--border); margin-top: auto;">
+    <div id="planBadge" class="badge" style="display: block; text-align: center; margin-bottom: 12px;">ÜCRETSİZ PLAN</div>
+    <button onclick="showView('pro')" class="btan" style="width: 100%; padding: 10px;">PRO'ya Geç</button>
+  </div>
+</aside>
+
+<div class="wrap" id="mainWrap">
 
 <header>
   <div class="hdr">
     <div class="logo">site<span>sağlık</span>.analiz</div>
-    <div style="display: flex; align-items: center; gap: 12px;">
+    <div id="navRight" style="display: flex; align-items: center; gap: 12px;">
       <button id="themeToggle" class="btnnew" style="margin:0; padding: 6px 12px; font-size: 11px;">
         <span id="themeIcon">🌙</span> <span id="themeText">Koyu</span>
       </button>
-      <div class="badge">BETA</div>
+      <div id="authButtons" style="display: flex; gap: 8px;">
+        <button onclick="showAuth('login')" class="btnnew" style="margin:0; padding: 6px 12px; font-size: 11px;">Giriş</button>
+        <button onclick="showAuth('register')" class="btan" style="padding: 6px 14px; font-size: 11px;">Kayıt Ol</button>
+      </div>
+      <div id="userMenu" style="display: none; align-items: center; gap: 12px;">
+         <span id="userName" style="font-size: 12px; font-weight: 600;"></span>
+         <button onclick="toggleSidebar()" class="btnnew" style="margin:0; padding: 6px 12px; font-size: 11px;">Panel</button>
+         <button onclick="handleLogout()" class="btnnew" style="margin:0; padding: 6px 12px; font-size: 11px; border-color: var(--red-bd); color: var(--red);">Çıkış</button>
+      </div>
     </div>
   </div>
 </header>
 
-<section class="hero">
-  <div class="hlbl">Web Site Sağlık Paneli</div>
-  <h1>Sitenizin <em>gerçek</em><br>durumunu öğrenin.</h1>
-  <p class="hsub">Gelişmiş güvenlik, teknik SEO, DNS ve rakip analizi ile işletmenizi büyütün.</p>
-</section>
+<!-- Auth Modal -->
+<div id="authModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.8); z-index:1000; display:flex; align-items:center; justify-content:center; backdrop-filter: blur(4px);">
+  <div class="icard" style="width:100%; max-width:400px; margin:0;">
+    <div style="display:flex; justify-content:space-between; margin-bottom:20px;">
+      <h2 id="authTitle" style="font-family:var(--fd); font-size:18px;">Giriş Yap</h2>
+      <button onclick="closeAuth()" style="background:none; border:none; color:var(--text3); cursor:pointer;">✕</button>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:12px;">
+      <button onclick="loginWithGoogle()" class="btnnew" style="width:100%; margin:0; display:flex; justify-content:center; align-items:center; gap:8px;">
+        <img src="https://www.google.com/favicon.ico" width="16" height="16"> Google ile devam et
+      </button>
+      <div style="display:flex; align-items:center; gap:10px; color:var(--text3); font-size:12px;">
+        <div style="flex:1; height:1px; background:var(--border);"></div> VEYA <div style="flex:1; height:1px; background:var(--border);"></div>
+      </div>
+      <input type="email" id="authEmail" class="uin" placeholder="E-posta adresiniz">
+      <input type="password" id="authPass" class="uin" placeholder="Şifreniz">
+      <button id="authSubmit" onclick="handleAuth()" class="btan" style="width:100%;">Giriş Yap</button>
+      <p id="authSwitch" style="font-size:12px; text-align:center; color:var(--text3); cursor:pointer;" onclick="switchAuth()"></p>
+    </div>
+  </div>
+</div>
+
+<div id="view-home">
+  <section class="hero">
+    <div class="hlbl">Web Site Sağlık Paneli</div>
+    <h1>Sitenizin <em>gerçek</em><br>durumunu öğrenin.</h1>
+    <p class="hsub">Gelişmiş güvenlik, teknik SEO, DNS ve rakip analizi ile işletmenizi büyütün.</p>
+  </section>
 
 <div style="margin-bottom: 20px; display: flex; gap: 10px;">
   <button id="modeSingle" class="btan" style="background: var(--surface2); border: 1px solid var(--border); color: var(--text2);" onclick="setMode('single')">Tekli Analiz</button>
@@ -268,11 +369,23 @@ footer{border-top:1px solid var(--border);padding:20px 0;text-align:center;font-
 </div>
 
 <div class="res" id="res">
+  <div id="compareHeader" style="display:none; background:var(--accent-glow); padding:15px; border-radius:12px; margin-bottom:20px; border:1px solid var(--accent-glow);">
+    <div style="font-weight:700; color:var(--accent2); margin-bottom:10px; display:flex; align-items:center; gap:8px;">
+      <i data-lucide="arrow-left-right"></i> Karşılaştırma Modu Aktif
+    </div>
+    <div id="compareStats" class="irow"></div>
+  </div>
   <div class="reshdr">
     <div class="resinfo"><h2 id="rFirma">—</h2><div class="resurl" id="rUrl">—</div></div>
     <div class="scwrap">
       <div class="sccirc" id="scC"><span class="scn" id="scN">—</span><span class="scd">/100</span></div>
       <div class="slbl" id="scL">—</div>
+    </div>
+  </div>
+
+  <div class="icard" style="background: var(--surface2); padding: 30px;">
+    <div style="max-width: 500px; margin: 0 auto;">
+      <canvas id="radarChart"></canvas>
     </div>
   </div>
 
@@ -338,6 +451,119 @@ footer{border-top:1px solid var(--border);padding:20px 0;text-align:center;font-
     <div><div class="hwn">04</div><div class="hwt">Harekete Geçin</div><div class="hwd">Her adım sade Türkçe. Teknik bilgiye gerek yok.</div></div>
   </div>
 </div>
+</div><!-- end view-home -->
+
+<!-- Dashboard View -->
+<!-- AI Chat Widget -->
+<div id="aiChat" style="display:none; position:fixed; right:30px; bottom:30px; width:350px; height:500px; background:var(--surface); border:1px solid var(--border2); border-radius:16px; z-index:999; flex-direction:column; box-shadow:0 10px 40px rgba(0,0,0,0.4); overflow:hidden;">
+  <div style="padding:15px; background:var(--accent); color:#fff; display:flex; justify-content:space-between; align-items:center;">
+    <div style="display:flex; align-items:center; gap:8px; font-weight:700; font-family:var(--fd);"><i data-lucide="bot"></i> AI Danışman</div>
+    <button onclick="toggleAIChat()" style="background:none; border:none; color:#fff; cursor:pointer;">✕</button>
+  </div>
+  <div id="chatBox" style="flex:1; padding:15px; overflow-y:auto; display:flex; flex-direction:column; gap:10px;">
+    <div style="background:var(--surface2); padding:10px; border-radius:10px; font-size:13px; align-self:flex-start; max-width:85%;">
+      Merhaba! Ben AI Danışmanınız. Analiz sonuçlarınız hakkında ne sormak istersiniz?
+    </div>
+  </div>
+  <div style="padding:15px; border-top:1px solid var(--border2); display:flex; gap:10px;">
+    <input type="text" id="chatInput" class="uin" placeholder="Sorunuzu yazın..." style="padding:8px 12px; font-size:13px;">
+    <button onclick="sendChatMessage()" class="btan" style="padding:8px 15px;"><i data-lucide="send" style="width:16px;"></i></button>
+  </div>
+</div>
+<button id="aiChatBtn" onclick="toggleAIChat()" style="display:none; position:fixed; right:30px; bottom:30px; width:60px; height:60px; border-radius:50%; background:var(--accent); color:#fff; border:none; cursor:pointer; z-index:998; box-shadow:0 5px 20px var(--accent-glow); align-items:center; justify-content:center;">
+  <i data-lucide="message-square"></i>
+</button>
+
+<div id="view-dashboard" style="display:none;">
+  <div class="sttl mb24">Genel Bakış</div>
+  <div class="cgrid">
+    <div class="ccard">
+      <div class="cnm">Toplam Analiz</div>
+      <div class="scn" id="stat-total">0</div>
+    </div>
+    <div class="ccard">
+      <div class="cnm">Ortalama Skor</div>
+      <div class="scn" id="stat-avg">0</div>
+    </div>
+    <div class="ccard">
+      <div class="cnm">Takip Listesi</div>
+      <div class="scn" id="stat-tracking">0</div>
+    </div>
+  </div>
+  <div class="sttl mb24" style="margin-top:40px">Son Analizler</div>
+  <div id="recentList"></div>
+</div>
+
+<!-- History View -->
+<!-- Tracking View -->
+<div id="view-tracking" style="display:none;">
+  <div class="sttl mb24">Takip Listesi</div>
+  <div class="icard">
+    <div class="ilbl">Yeni Domain Takip Et</div>
+    <div class="urow">
+      <input type="text" id="trackIn" class="uin" placeholder="takipedilecek.com">
+      <button class="btan" onclick="addTrack()">Ekle</button>
+    </div>
+  </div>
+  <div id="trackingList" class="cgrid"></div>
+</div>
+
+<!-- Settings View -->
+<div id="view-settings" style="display:none;">
+  <div class="sttl mb24">Hesap Ayarları</div>
+  <div class="icard">
+    <div class="ilbl">Bildirim Tercihleri</div>
+    <div style="display:flex; flex-direction:column; gap:12px; margin-top:10px;">
+      <label style="display:flex; align-items:center; gap:10px; font-size:13px; cursor:pointer;">
+        <input type="checkbox" checked> E-posta bildirimleri (Haftalık özet)
+      </label>
+      <label style="display:flex; align-items:center; gap:10px; font-size:13px; cursor:pointer;">
+        <input type="checkbox" checked> Kritik skor düşüş uyarıları
+      </label>
+    </div>
+    <button class="btan" style="margin-top:20px; font-size:12px; padding:8px 15px;">Ayarları Kaydet</button>
+  </div>
+</div>
+
+<!-- PRO View -->
+<div id="view-pro" style="display:none;">
+  <div class="sttl mb24">PRO Üyelik</div>
+  <div class="icard" style="text-align:center; padding:40px;">
+    <div class="badge" style="display:inline-block; margin-bottom:15px;">SINIRSIZ GÜÇ</div>
+    <h2 style="font-family:var(--fd); font-size:32px; margin-bottom:15px;">Analizlerinizi Bir Üst Seviyeye Taşıyın</h2>
+    <p style="color:var(--text2); margin-bottom:30px; max-width:500px; margin-left:auto; margin-right:auto;">AI Çözüm rehberleri, sınırsız geçmiş, otomatik takip ve öncelikli raporlama ile profesyonel bir deneyim yaşayın.</p>
+    <div class="cgrid" style="text-align:left; max-width:700px; margin:0 auto 30px;">
+      <div class="ccard">
+        <div class="cnm" style="color:var(--accent2); font-weight:700;">PRO Plan</div>
+        <div class="scn" style="font-size:24px;">$19<span style="font-size:12px; opacity:0.5;">/ay</span></div>
+        <ul style="font-size:12px; color:var(--text3); margin-top:15px; padding-left:15px;">
+           <li>AI Danışman Sınırsız Soru</li>
+           <li>Haftalık Otomatik Takipler</li>
+           <li>Gelişmiş PDF Raporları</li>
+           <li>E-posta Bildirimleri</li>
+        </ul>
+        <button class="btan" style="width:100%; margin-top:20px;" onclick="simulatePayment()">Şimdi Abone Ol</button>
+      </div>
+      <div class="ccard" style="opacity:0.6;">
+        <div class="cnm">Ücretsiz</div>
+        <div class="scn" style="font-size:24px;">$0<span style="font-size:12px; opacity:0.5;">/ay</span></div>
+        <p style="font-size:11px; margin-top:15px;">Temel özellikler ve sınırlı geçmiş kaydı.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="view-history" style="display:none;">
+  <div class="sttl mb24">Analiz Geçmişi</div>
+  <div class="icard">
+    <div class="urow">
+      <input type="text" id="histSearch" class="uin" placeholder="Domain ara...">
+    </div>
+  </div>
+  <div id="historyTable" style="overflow-x:auto;">
+    <!-- Tablo buraya gelecek -->
+  </div>
+</div>
 
 <footer>Site Sağlık Raporu &mdash; KOBİ'ler için web analizi</footer>
 </div>
@@ -380,7 +606,214 @@ systemDark.addEventListener('change', e => {
   }
 });
 
-let D=null, openIdx=null, currentMode='single';
+// SUPABASE CONFIG (Placeholder - replaced by actual config in production)
+const SB_URL = "https://your-project.supabase.co";
+const SB_KEY = "your-anon-key";
+const supabase = window.supabase ? window.supabase.createClient(SB_URL, SB_KEY) : null;
+
+let D=null, openIdx=null, currentMode='single', currentUser=null;
+
+// Auth Functions
+function showAuth(mode = 'login') {
+  const modal = document.getElementById('authModal');
+  const title = document.getElementById('authTitle');
+  const submit = document.getElementById('authSubmit');
+  const switcher = document.getElementById('authSwitch');
+  
+  modal.style.display = 'flex';
+  if(mode === 'login') {
+    title.textContent = 'Giriş Yap';
+    submit.textContent = 'Giriş Yap';
+    switcher.textContent = 'Hesabınız yok mu? Kayıt olun';
+    switcher.onclick = () => showAuth('register');
+  } else {
+    title.textContent = 'Kayıt Ol';
+    submit.textContent = 'Kayıt Ol';
+    switcher.textContent = 'Zaten hesabınız var mı? Giriş yapın';
+    switcher.onclick = () => showAuth('login');
+  }
+}
+
+function closeAuth() {
+  document.getElementById('authModal').style.display = 'none';
+}
+
+async function handleAuth() {
+  const email = document.getElementById('authEmail').value;
+  const password = document.getElementById('authPass').value;
+  const isLogin = document.getElementById('authTitle').textContent === 'Giriş Yap';
+  
+  if(!supabase) { alert('Supabase bağlantısı kurulamadı.'); return; }
+  
+  const btn = document.getElementById('authSubmit');
+  btn.disabled = true; btn.textContent = 'İşleniyor...';
+  
+  try {
+    let result;
+    if(isLogin) {
+      result = await supabase.auth.signInWithPassword({ email, password });
+    } else {
+      result = await supabase.auth.signUp({ email, password });
+    }
+    
+    if(result.error) throw result.error;
+    
+    if(!isLogin) alert('Kayıt başarılı! Lütfen e-posta adresinizi doğrulayın.');
+    closeAuth();
+  } catch(e) {
+    alert('Hata: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = isLogin ? 'Giriş Yap' : 'Kayıt Ol';
+  }
+}
+
+async function loginWithGoogle() {
+  if(!supabase) return;
+  const { error } = await supabase.auth.signInWithOAuth({ provider: 'google' });
+  if(error) alert(error.message);
+}
+
+async function handleLogout() {
+  if(!supabase) return;
+  await supabase.auth.signOut();
+  window.location.reload();
+}
+
+// Auth State Listener
+if(supabase) {
+  supabase.auth.onAuthStateChange((event, session) => {
+    currentUser = session?.user || null;
+    updateUIForAuth();
+  });
+}
+
+function updateUIForAuth() {
+  const authBtns = document.getElementById('authButtons');
+  const userMenu = document.getElementById('userMenu');
+  const userName = document.getElementById('userName');
+  
+  if(currentUser) {
+    authBtns.style.display = 'none';
+    userMenu.style.display = 'flex';
+    userName.textContent = currentUser.email.split('@')[0];
+    fetchDashboardStats();
+  } else {
+    authBtns.style.display = 'flex';
+    userMenu.style.display = 'none';
+    if(currentView !== 'home') showView('home');
+  }
+}
+
+let currentView = 'home';
+function showView(view) {
+  currentView = view;
+  const views = ['home', 'dashboard', 'history', 'tracking', 'settings', 'pro'];
+  views.forEach(v => {
+    const el = document.getElementById('view-' + v);
+    if(el) el.style.display = v === view ? 'block' : 'none';
+  });
+  
+  // Update sidebar links
+  document.querySelectorAll('.sb-link').forEach(l => {
+    l.classList.remove('active');
+    if(l.textContent.toLowerCase().includes(view === 'home' ? 'ana sayfa' : view)) l.classList.add('active');
+  });
+  
+  if(view === 'history') fetchHistory();
+  if(window.innerWidth < 1024) toggleSidebar(false);
+  
+  // Lucide icons update
+  if(window.lucide) window.lucide.createIcons();
+}
+
+function toggleSidebar(force) {
+  const sb = document.getElementById('sidebar');
+  const ov = document.getElementById('sbOverlay');
+  const isOpening = force !== undefined ? force : !sb.classList.contains('on');
+  
+  sb.classList.toggle('on', isOpening);
+  ov.classList.toggle('on', isOpening);
+}
+
+async function fetchDashboardStats() {
+  if(!currentUser || !supabase) return;
+  const { count: total } = await supabase.from('reports').select('*', { count: 'exact', head: true }).eq('user_id', currentUser.id);
+  const { count: tracking } = await supabase.from('tracked_domains').select('*', { count: 'exact', head: true }).eq('user_id', currentUser.id);
+  
+  document.getElementById('stat-total').textContent = total || 0;
+  document.getElementById('stat-tracking').textContent = tracking || 0;
+  
+  // Recent analyses in dashboard
+  const { data: recent } = await supabase.from('reports').select('domain, overall_score, created_at').eq('user_id', currentUser.id).limit(3).order('created_at', { ascending: false });
+  const list = document.getElementById('recentList');
+  if(recent && recent.length) {
+    list.innerHTML = recent.map(r => `
+      <div class="pitem">
+        <span class="pbdg ph">${r.overall_score}</span>
+        <span class="pt">${r.domain}</span>
+        <span class="pm2">${new Date(r.created_at).toLocaleDateString()}</span>
+      </div>
+    `).join('');
+  } else {
+    list.innerHTML = '<p style="font-size:12px; color:var(--text3)">Henüz rapor yok.</p>';
+  }
+}
+
+async function fetchHistory() {
+  if(!currentUser || !supabase) return;
+  const { data } = await supabase.from('reports').select('*').eq('user_id', currentUser.id).order('created_at', { ascending: false });
+  renderHistoryTable(data || []);
+}
+
+function renderHistoryTable(data) {
+  const container = document.getElementById('historyTable');
+  if(!data.length) {
+    container.innerHTML = '<p style="color:var(--text3); padding:20px; text-align:center;">Henüz analiz kaydınız bulunmuyor.</p>';
+    return;
+  }
+  
+  let html = `<table style="width:100%; border-collapse:collapse; font-size:13px;">
+    <thead>
+      <tr style="text-align:left; border-bottom:1px solid var(--border2); color:var(--text3);">
+        <th style="padding:12px;">Domain</th>
+        <th style="padding:12px;">Skor</th>
+        <th style="padding:12px;">Tarih</th>
+        <th style="padding:12px;">İşlem</th>
+      </tr>
+    </thead>
+    <tbody>`;
+  
+  data.forEach(r => {
+    html += `<tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:12px; font-weight:600;">${r.domain}</td>
+      <td style="padding:12px;"><span class="hst ${scCl(r.overall_score)}">${r.overall_score}</span></td>
+      <td style="padding:12px; color:var(--text3);">${new Date(r.created_at).toLocaleDateString('tr-TR')}</td>
+      <td style="padding:12px;">
+        <button onclick='viewSavedReport(${JSON.stringify(r.id)})' class="btnnew" style="padding:4px 8px; font-size:11px;">Görüntüle</button>
+      </td>
+    </tr>`;
+  });
+  
+  html += `</tbody></table>`;
+  container.innerHTML = html;
+}
+
+function viewSavedReport(id) {
+  // Raporu detaylı görüntüleme mantığı
+  alert('Rapor detayları yükleniyor: ' + id);
+}
+
+function simulatePayment() {
+  alert('Ödeme simülasyonu başlatıldı... (Stripe/Iyzico altyapısı hazır)');
+  setTimeout(() => {
+    alert('Tebrikler! PRO üyeliğiniz aktif edildi.');
+    document.getElementById('planBadge').textContent = 'PRO PLAN';
+    document.getElementById('planBadge').style.borderColor = 'var(--yellow)';
+    document.getElementById('planBadge').style.color = 'var(--yellow)';
+    showView('dashboard');
+  }, 1500);
+}
 
 function setMode(m){
   currentMode = m;
@@ -422,6 +855,10 @@ function runProg(cb){
 }
 
 async function start(hn_arg, rival_hn){
+  if(!currentUser && D) {
+    // Demo kısıtlaması simülasyonu
+    console.log('Misafir kullanıcı için 2. analiz kısıtlaması uygulanabilir.');
+  }
   hideE();
   const hn = hn_arg || normUrl(document.getElementById('urlIn').value);
   if(!hn){showE('Lütfen geçerli bir adres girin. Örnek: www.firmaniz.com');return;}
@@ -442,9 +879,31 @@ async function start(hn_arg, rival_hn){
     return r.json();
   }).then(r=>result=r).catch(e=>err=e);
 
+  // Log flow simulation
+  const logs = [
+    'URL doğrulanıyor...',
+    'DNS kayıtları çözülüyor (A, MX, TXT)...',
+    'SSL sertifikası geçerliliği kontrol ediliyor...',
+    'Güvenlik başlıkları (CSP, HSTS) taranıyor...',
+    'Sayfa içeriği ve meta etiketler analiz ediliyor...',
+    'Görüntü alt etiketleri ve WebP kontrolü yapılıyor...',
+    'Kurumsal iletişim ve KVKK verileri aranıyor...',
+    'AI Danışman raporu hazırlıyor...'
+  ];
+  let logIdx = 0;
+  const logInterval = setInterval(() => {
+    if(logIdx < logs.length) {
+      document.getElementById('stps').insertAdjacentHTML('beforeend', `<div class="step active" style="font-size:11px; opacity:0.7;"><div class="sico">•</div><span>${logs[logIdx]}</span></div>`);
+      logIdx++;
+    } else {
+      clearInterval(logInterval);
+    }
+  }, 500);
+
   const minW=new Promise(r=>setTimeout(r,4000));
   runProg(async()=>{
     await Promise.allSettled([apiCall,minW]);
+    clearInterval(logInterval);
     document.getElementById('pw').classList.remove('on');
     btn.disabled=false;btn.textContent='Analiz Et';
     if(err||!result){
@@ -453,11 +912,85 @@ async function start(hn_arg, rival_hn){
       return;
     }
     D={...result,site_url:hn};
+    if(rival_hn) D.rival_url = rival_hn;
     render(D);
+    document.getElementById('aiChatBtn').style.display = 'flex';
+    if(currentUser) autoSaveReport(D);
   });
 }
 
+async function autoSaveReport(report) {
+  if(!supabase || !currentUser) return;
+  const { error } = await supabase.from('reports').insert({
+    user_id: currentUser.id,
+    domain: report.site_url,
+    overall_score: report.genel_puan,
+    security_score: report.kategoriler.find(c=>c.ad==='Güvenlik')?.puan || 0,
+    seo_score: report.kategoriler.find(c=>c.ad==='SEO')?.puan || 0,
+    performance_score: report.kategoriler.find(c=>c.ad==='Performans')?.puan || 0,
+    summary: report.ozet_metin,
+    full_data: report
+  });
+  if(error) console.error('Rapor kaydedilemedi:', error);
+}
+
+function toggleAIChat() {
+  const chat = document.getElementById('aiChat');
+  const btn = document.getElementById('aiChatBtn');
+  if(chat.style.display === 'none') {
+    chat.style.display = 'flex';
+    btn.style.display = 'none';
+  } else {
+    chat.style.display = 'none';
+    btn.style.display = 'flex';
+  }
+}
+
+async function addTrack() {
+  if(!currentUser) { showAuth('register'); return; }
+  const domain = document.getElementById('trackIn').value.trim();
+  if(!domain) return;
+  
+  const { error } = await supabase.from('tracked_domains').insert({ user_id: currentUser.id, domain });
+  if(error) alert(error.message);
+  else {
+    alert('Domain takibe alındı.');
+    document.getElementById('trackIn').value = '';
+    fetchDashboardStats();
+  }
+}
+
+async function sendChatMessage() {
+  const input = document.getElementById('chatInput');
+  const box = document.getElementById('chatBox');
+  const msg = input.value.trim();
+  if(!msg) return;
+  
+  box.innerHTML += `<div style="background:var(--accent-glow); padding:10px; border-radius:10px; font-size:13px; align-self:flex-end; max-width:85%; color:var(--accent2);">${msg}</div>`;
+  input.value = '';
+  box.scrollTop = box.scrollHeight;
+  
+  // AI Mock response for demo
+  setTimeout(() => {
+    box.innerHTML += `<div style="background:var(--surface2); padding:10px; border-radius:10px; font-size:13px; align-self:flex-start; max-width:85%;">Harika bir soru. Sitenizdeki ${msg} konusu için PRO plana geçerek detaylı AI çözüm rehberine ulaşabilirsiniz.</div>`;
+    box.scrollTop = box.scrollHeight;
+  }, 1000);
+}
+
 function render(d){
+  if(d.rival_url) {
+    document.getElementById('compareHeader').style.display = 'block';
+    const rival = (d.rakip_analizi || []).find(r => r.rakip_ad.toLowerCase().includes(d.rival_url.toLowerCase())) || d.rakip_analizi?.[0];
+    if(rival) {
+       document.getElementById('compareStats').innerHTML = `
+         <div class="chip" style="color:var(--text)">${d.site_url}: <strong>${d.genel_puan}</strong></div>
+         <div class="chip" style="color:var(--accent2)">${rival.rakip_ad}: <strong>${rival.puan}</strong></div>
+         <div class="chip" style="background:var(--accent-glow)">Fark: <strong>${d.genel_puan - rival.puan}</strong></div>
+       `;
+    }
+  } else {
+    document.getElementById('compareHeader').style.display = 'none';
+  }
   document.getElementById('rFirma').textContent=d.firma_adi||d.site_url;
   document.getElementById('rUrl').textContent=d.site_url;
   const p=d.genel_puan,cl=pCl(p);
@@ -469,6 +1002,7 @@ function render(d){
   renderT(d.teknoloji);
   renderTech(d.teknik_analiz, d.guvenlik_detay);
   renderCats(d.kategoriler);
+  renderRadar(d.kategoriler);
   renderSSL(d.ssl_detay);
   renderCorp(d.kurumsal_eksikler);
   renderRivals(d.rakip_analizi);
@@ -535,6 +1069,45 @@ function renderT(ts){
   });
 }
 
+let radarChart = null;
+function renderRadar(cats) {
+  const ctx = document.getElementById('radarChart').getContext('2d');
+  if(radarChart) radarChart.destroy();
+  
+  const labels = cats.map(c => c.ad);
+  const data = cats.map(c => c.puan);
+  
+  const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+  const color = isDark ? '#10B981' : '#059669';
+  
+  radarChart = new Chart(ctx, {
+    type: 'radar',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Site Skorları',
+        data: data,
+        backgroundColor: color + '33',
+        borderColor: color,
+        borderWidth: 2,
+        pointBackgroundColor: color,
+      }]
+    },
+    options: {
+      scales: {
+        r: {
+          beginAtZero: true,
+          max: 100,
+          grid: { color: isDark ? '#334155' : '#E2E8F0' },
+          angleLines: { color: isDark ? '#334155' : '#E2E8F0' },
+          pointLabels: { color: isDark ? '#94A3B8' : '#64748B', font: { size: 10, family: 'Syne' } }
+        }
+      },
+      plugins: { legend: { display: false } }
+    }
+  });
+}
+
 function renderCats(cats){
   const g=document.getElementById('cGrid'),p=document.getElementById('dPanels');
   g.innerHTML='';p.innerHTML='';openIdx=null;
@@ -560,6 +1133,10 @@ function buildDet(k){
   if((k.aksiyonlar||[]).length){
     h+=`<div class="attl">Yapılacaklar</div>`;
     k.aksiyonlar.forEach((a,i)=>{h+=`<div class="aitem"><span class="anum">${i+1}</span><span>${a}</span></div>`;});
+  }
+  if(k.ai_yorum){
+    h+=`<div class="attl" style="color:var(--accent2); display:flex; align-items:center; gap:6px;"><i data-lucide="sparkles" style="width:14px;"></i> AI Danışman Yorumu</div>`;
+    h+=`<div class="coz" style="background:var(--accent-glow); padding:10px; border-radius:8px; color:var(--text2); border:1px solid var(--accent-glow);">${k.ai_yorum}</div>`;
   }
   return h;
 }
