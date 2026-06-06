@@ -261,7 +261,7 @@ footer{border-top:1px solid var(--border);padding:20px 0;text-align:center;font-
 <aside id="sidebar" class="sidebar">
   <div class="sb-hdr">
     <div class="logo">site<span>sağlık</span>.analiz</div>
-    <button onclick="toggleSidebar()" style="background:none; border:none; color:var(--text3); cursor:pointer;">✕</button>
+    <button onclick="toggleSidebar()" style="background:none; border:none; color:var(--text3); cursor:pointer; padding: 4px; display: flex; align-items: center; justify-content: center;"><i data-lucide="x" style="width: 20px; height: 20px;"></i></button>
   </div>
   <nav class="sb-nav">
     <div class="sb-link active" onclick="showView('home')"><i data-lucide="home"></i> Ana Sayfa</div>
@@ -299,11 +299,11 @@ footer{border-top:1px solid var(--border);padding:20px 0;text-align:center;font-
 </header>
 
 <!-- Auth Modal -->
-<div id="authModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.8); z-index:1000; display:flex; align-items:center; justify-content:center; backdrop-filter: blur(4px);">
+<div id="authModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.8); z-index:1000; align-items:center; justify-content:center; backdrop-filter: blur(4px);">
   <div class="icard" style="width:100%; max-width:400px; margin:0;">
-    <div style="display:flex; justify-content:space-between; margin-bottom:20px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
       <h2 id="authTitle" style="font-family:var(--fd); font-size:18px;">Giriş Yap</h2>
-      <button onclick="closeAuth()" style="background:none; border:none; color:var(--text3); cursor:pointer;">✕</button>
+      <button onclick="closeAuth()" style="background:none; border:none; color:var(--text3); cursor:pointer; padding: 4px; display: flex; align-items: center; justify-content: center;"><i data-lucide="x" style="width: 20px; height: 20px;"></i></button>
     </div>
     <div style="display:flex; flex-direction:column; gap:12px;">
       <button onclick="loginWithGoogle()" class="btnnew" style="width:100%; margin:0; display:flex; justify-content:center; align-items:center; gap:8px;">
@@ -458,7 +458,7 @@ footer{border-top:1px solid var(--border);padding:20px 0;text-align:center;font-
 <div id="aiChat" style="display:none; position:fixed; right:30px; bottom:30px; width:350px; height:500px; background:var(--surface); border:1px solid var(--border2); border-radius:16px; z-index:999; flex-direction:column; box-shadow:0 10px 40px rgba(0,0,0,0.4); overflow:hidden;">
   <div style="padding:15px; background:var(--accent); color:#fff; display:flex; justify-content:space-between; align-items:center;">
     <div style="display:flex; align-items:center; gap:8px; font-weight:700; font-family:var(--fd);"><i data-lucide="bot"></i> AI Danışman</div>
-    <button onclick="toggleAIChat()" style="background:none; border:none; color:#fff; cursor:pointer;">✕</button>
+    <button onclick="toggleAIChat()" style="background:none; border:none; color:#fff; cursor:pointer; padding: 4px; display: flex; align-items: center; justify-content: center;"><i data-lucide="x" style="width: 20px; height: 20px;"></i></button>
   </div>
   <div id="chatBox" style="flex:1; padding:15px; overflow-y:auto; display:flex; flex-direction:column; gap:10px;">
     <div style="background:var(--surface2); padding:10px; border-radius:10px; font-size:13px; align-self:flex-start; max-width:85%;">
@@ -609,18 +609,19 @@ systemDark.addEventListener('change', e => {
 // SUPABASE CONFIG (Placeholder - replaced by actual config in production)
 const SB_URL = "https://your-project.supabase.co";
 const SB_KEY = "your-anon-key";
-const supabase = window.supabase ? window.supabase.createClient(SB_URL, SB_KEY) : null;
+var supabase = window.supabase ? window.supabase.createClient(SB_URL, SB_KEY) : null;
 
-let D=null, openIdx=null, currentMode='single', currentUser=null;
+var D=null, openIdx=null, currentMode='single', currentUser=null;
 
 // Auth Functions
-function showAuth(mode = 'login') {
+window.showAuth = function(mode = 'login') {
   const modal = document.getElementById('authModal');
   const title = document.getElementById('authTitle');
   const submit = document.getElementById('authSubmit');
   const switcher = document.getElementById('authSwitch');
   
   modal.style.display = 'flex';
+  if(window.lucide) window.lucide.createIcons();
   if(mode === 'login') {
     title.textContent = 'Giriş Yap';
     submit.textContent = 'Giriş Yap';
@@ -734,6 +735,7 @@ function toggleSidebar(force) {
   
   sb.classList.toggle('on', isOpening);
   ov.classList.toggle('on', isOpening);
+  if(isOpening && window.lucide) window.lucide.createIcons();
 }
 
 async function fetchDashboardStats() {
@@ -881,29 +883,35 @@ async function start(hn_arg, rival_hn){
 
   // Log flow simulation
   const logs = [
-    'URL doğrulanıyor...',
     'DNS kayıtları çözülüyor (A, MX, TXT)...',
     'SSL sertifikası geçerliliği kontrol ediliyor...',
     'Güvenlik başlıkları (CSP, HSTS) taranıyor...',
     'Sayfa içeriği ve meta etiketler analiz ediliyor...',
     'Görüntü alt etiketleri ve WebP kontrolü yapılıyor...',
-    'Kurumsal iletişim ve KVKK verileri aranıyor...',
     'AI Danışman raporu hazırlıyor...'
   ];
   let logIdx = 0;
+  const logItems = [];
   const logInterval = setInterval(() => {
     if(logIdx < logs.length) {
-      document.getElementById('stps').insertAdjacentHTML('beforeend', `<div class="step active" style="font-size:11px; opacity:0.7;"><div class="sico">•</div><span>${logs[logIdx]}</span></div>`);
+      const item = document.createElement('div');
+      item.className = 'step active';
+      item.style.cssText = 'font-size:11px; opacity:0.7; animation: fadeIn 0.3s ease;';
+      item.innerHTML = `<div class="sico">•</div><span>${logs[logIdx]}</span>`;
+      document.getElementById('stps').appendChild(item);
+      logItems.push(item);
       logIdx++;
     } else {
       clearInterval(logInterval);
     }
-  }, 500);
+  }, 600);
 
   const minW=new Promise(r=>setTimeout(r,4000));
   runProg(async()=>{
     await Promise.allSettled([apiCall,minW]);
     clearInterval(logInterval);
+    // Temizlik: eklenen logları kaldır
+    logItems.forEach(el => el.remove());
     document.getElementById('pw').classList.remove('on');
     btn.disabled=false;btn.textContent='Analiz Et';
     if(err||!result){
@@ -940,6 +948,7 @@ function toggleAIChat() {
   if(chat.style.display === 'none') {
     chat.style.display = 'flex';
     btn.style.display = 'none';
+    if(window.lucide) window.lucide.createIcons();
   } else {
     chat.style.display = 'none';
     btn.style.display = 'flex';
