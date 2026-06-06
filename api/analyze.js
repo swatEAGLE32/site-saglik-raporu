@@ -169,8 +169,8 @@ module.exports = async function handler(req, res) {
     "ssl_detay": { "gecerli": true, "yayinci": "", "bitis_tarihi": "", "oneri": "" },
     "rakip_analizi": [{"rakip_ad": "", "puan": 0, "farklar": "", "ustun_yanlar": []}],
     "sosyal_medya_stratejisi": {"mevcut_durum": "", "oneriler": [], "platformlar": []},
-    "kategoriler": [{"ad": "Güvenlik", "puan": 0, "ozet": "", "bulgular": [{"tip":"iyi|uyari|hata", "metin":""}], "aksiyonlar": []}],
-    "oncelikler": [{"oncelik": "Yüksek|Orta|Düşük", "is": "", "etki": "", "sure": ""}]
+    "kategoriler": [{"ad": "Güvenlik", "puan": 0, "ozet": "", "bulgular": [{"tip":"iyi|uyari|hata", "metin":""}], "aksiyonlar": [], "ai_yorum": ""}],
+    "oncelikler": [{"oncelik": "Yüksek|Orta|Düşük", "is": "", "etki": "", "sure": "", "cozum_rehberi": {"risk": "", "etki": "", "kod": ""}}]
   }`;
 
   try {
