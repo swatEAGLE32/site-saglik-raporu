@@ -93,12 +93,12 @@ async function getSiteData(hostname) {
     }
   }
 
-  // Check robots.txt & sitemap
+  // Check robots.txt & sitemap & common files
   try {
     const checkFile = (path) => new Promise(r => {
       const fullUrl = `${parsedUrl.protocol}//${parsedUrl.hostname}${path}`;
       const client = parsedUrl.protocol === 'https:' ? https : http;
-      const req = client.get(fullUrl, { timeout: 3000 }, (res) => {
+      const req = client.get(fullUrl, { timeout: 3000, headers: { 'User-Agent': 'Mozilla/5.0' } }, (res) => {
         r(res.statusCode === 200);
       });
       req.on('error', () => r(false));
@@ -107,7 +107,19 @@ async function getSiteData(hostname) {
     });
     results.files.robots = await checkFile('/robots.txt');
     results.files.sitemap = await checkFile('/sitemap.xml');
+    results.files.manifest = await checkFile('/manifest.json');
+    results.files.ads = await checkFile('/ads.txt');
   } catch (e) {}
+
+  // Check for mobile tags and other meta
+  if (results.html) {
+    results.meta = {
+      viewport: results.html.includes('name="viewport"'),
+      description: results.html.includes('name="description"'),
+      og: results.html.includes('property="og:'),
+      charset: results.html.includes('charset="')
+    };
+  }
 
   return results;
 }
@@ -123,13 +135,13 @@ module.exports = async function handler(req, res) {
 
   const siteData = await getSiteData(hostname);
 
-  const systemPrompt = `Sen kapsamlı bir web site analiz uzmanısın. SADECE JSON döndür.`;
-  const userPrompt = `Aşağıdaki verileri analiz et ve detaylı bir JSON raporu oluştur.
+  const systemPrompt = `Sen kapsamlı bir web site analiz uzmanısın. Türkiye'deki KOBİ'lere ve dijital ajanslara yönelik "müq" (mükemmel) seviyede teknik raporlar hazırlıyorsun. SADECE JSON döndür.`;
+  const userPrompt = `Aşağıdaki verileri analiz et ve profesyonel, detaylı bir JSON raporu oluştur.
   Veriler: ${JSON.stringify(siteData)}
-  ${rival_hostname ? `KIYASLAMA MODU: Lütfen bu siteyi özellikle ${rival_hostname} ile kıyasla.` : ''}
+  ${rival_hostname ? `KIYASLAMA MODU: Lütfen bu siteyi özellikle ${rival_hostname} ile kıyasla. Rakip analizi kısmında bu rakibi temel al.` : ''}
 
   Gereksinimler:
-  1. "guvenlik_basliklari" kısmında her başlık için durum (var|eksik|yok) ve aciklama yaz.
+  1. "guvenlik_basliklari" kısmında her başlık için durum (var|eksik|yok) ve detaylı teknik aciklama yaz.
   2. "performans" kısmında skorlar ve durumlar (iyi|orta|riskli) olmalı.
   3. "teknoloji" kısmında tespit ettiğin dilleri/araçları listele.
   4. "rakip_analizi": 3 gerçek rakip.
@@ -169,8 +181,8 @@ module.exports = async function handler(req, res) {
     "ssl_detay": { "gecerli": true, "yayinci": "", "bitis_tarihi": "", "oneri": "" },
     "rakip_analizi": [{"rakip_ad": "", "puan": 0, "farklar": "", "ustun_yanlar": []}],
     "sosyal_medya_stratejisi": {"mevcut_durum": "", "oneriler": [], "platformlar": []},
-    "kategoriler": [{"ad": "Güvenlik", "puan": 0, "ozet": "", "bulgular": [{"tip":"iyi|uyari|hata", "metin":""}], "aksiyonlar": []}],
-    "oncelikler": [{"oncelik": "Yüksek|Orta|Düşük", "is": "", "etki": "", "sure": ""}]
+    "kategoriler": [{"ad": "Güvenlik", "puan": 0, "ozet": "", "bulgular": [{"tip":"iyi|uyari|hata", "metin":""}], "aksiyonlar": [], "ai_yorum": ""}],
+    "oncelikler": [{"oncelik": "Yüksek|Orta|Düşük", "is": "", "etki": "", "sure": "", "cozum_rehberi": {"risk": "", "etki": "", "kod": ""}}]
   }`;
 
   try {
