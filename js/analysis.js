@@ -57,6 +57,7 @@ window.start = async function(hn_arg, rival_hn){
     return r.json();
   }).then(r=>result=r).catch(e=>err=e);
 
+  // Log flow simulation
   const logs = [
     'DNS kayıtları çözülüyor (A, MX, TXT)...',
     'SSL sertifikası geçerliliği kontrol ediliyor...',
@@ -85,6 +86,7 @@ window.start = async function(hn_arg, rival_hn){
   runProg(async()=>{
     await Promise.allSettled([apiCall,minW]);
     clearInterval(logInterval);
+    // Temizlik: eklenen logları kaldır
     logItems.forEach(el => el.remove());
     document.getElementById('pw').classList.remove('on');
     btn.disabled=false;btn.textContent='Analiz Et';
@@ -128,6 +130,7 @@ window.renderHistoryTable = function(data) {
     container.innerHTML = '<p style="color:var(--text3); padding:20px; text-align:center;">Henüz analiz kaydınız bulunmuyor.</p>';
     return;
   }
+  
   let html = `<table style="width:100%; border-collapse:collapse; font-size:13px;">
     <thead>
       <tr style="text-align:left; border-bottom:1px solid var(--border2); color:var(--text3);">
@@ -138,6 +141,7 @@ window.renderHistoryTable = function(data) {
       </tr>
     </thead>
     <tbody>`;
+  
   data.forEach(r => {
     html += `<tr style="border-bottom:1px solid var(--border);">
       <td style="padding:12px; font-weight:600;">${r.domain}</td>
@@ -148,6 +152,7 @@ window.renderHistoryTable = function(data) {
       </td>
     </tr>`;
   });
+  
   html += `</tbody></table>`;
   container.innerHTML = html;
 }
@@ -159,6 +164,7 @@ window.viewSavedReport = async function(id) {
     alert('Rapor yüklenirken hata oluştu: ' + (error?.message || 'Veri bulunamadı'));
     return;
   }
+  
   D = data.full_data;
   showView('home');
   render(D);
@@ -169,6 +175,7 @@ window.addTrack = async function() {
   if(!currentUser) { showAuth('register'); return; }
   const domain = document.getElementById('trackIn').value.trim();
   if(!domain) return;
+  
   const { error } = await supabase.from('tracked_domains').insert({ user_id: currentUser.id, domain });
   if(error) alert(error.message);
   else {
@@ -178,85 +185,22 @@ window.addTrack = async function() {
   }
 }
 
-// ── AI CHAT — GERÇEK API ──────────────────────────────────────────────────────
-let chatHistory = [];
-
 window.sendChatMessage = async function() {
   const input = document.getElementById('chatInput');
   const box = document.getElementById('chatBox');
-  const sendBtn = document.querySelector('#aiChat .btan');
   const msg = input.value.trim();
-  if (!msg) return;
-
-  // Kullanıcı mesajını göster
-  const userDiv = document.createElement('div');
-  userDiv.style.cssText = 'background:var(--accent-glow);padding:10px 14px;border-radius:12px 12px 2px 12px;font-size:13px;align-self:flex-end;max-width:85%;color:var(--accent2);line-height:1.5;';
-  userDiv.textContent = msg;
-  box.appendChild(userDiv);
+  if(!msg) return;
+  
+  box.innerHTML += `<div style="background:var(--accent-glow); padding:10px; border-radius:10px; font-size:13px; align-self:flex-end; max-width:85%; color:var(--accent2);">${msg}</div>`;
   input.value = '';
   box.scrollTop = box.scrollHeight;
-
-  chatHistory.push({ role: 'user', content: msg });
-
-  // Typing indicator
-  const typingDiv = document.createElement('div');
-  typingDiv.id = 'typingIndicator';
-  typingDiv.style.cssText = 'background:var(--surface2);padding:10px 14px;border-radius:12px 12px 12px 2px;font-size:13px;align-self:flex-start;color:var(--text3);';
-  typingDiv.innerHTML = '<span style="letter-spacing:3px">···</span>';
-  box.appendChild(typingDiv);
-  box.scrollTop = box.scrollHeight;
-
-  if (sendBtn) sendBtn.disabled = true;
-
-  try {
-    const response = await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        message: msg,
-        report: D || null,
-        history: chatHistory.slice(-10)
-      })
-    });
-
-    const data = await response.json();
-    const reply = data.reply || data.error || 'Yanıt alınamadı.';
-
-    const ti = document.getElementById('typingIndicator');
-    if (ti) ti.remove();
-
-    const aiDiv = document.createElement('div');
-    aiDiv.style.cssText = 'background:var(--surface2);padding:10px 14px;border-radius:12px 12px 12px 2px;font-size:13px;align-self:flex-start;max-width:85%;color:var(--text);line-height:1.6;border:1px solid var(--border);';
-    aiDiv.innerHTML = reply
-      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-      .replace(/\n/g, '<br>');
-    box.appendChild(aiDiv);
+  
+  // AI Mock response for demo
+  setTimeout(() => {
+    box.innerHTML += `<div style="background:var(--surface2); padding:10px; border-radius:10px; font-size:13px; align-self:flex-start; max-width:85%;">Harika bir soru. Sitenizdeki ${msg} konusu için PRO plana geçerek detaylı AI çözüm rehberine ulaşabilirsiniz.</div>`;
     box.scrollTop = box.scrollHeight;
-
-    chatHistory.push({ role: 'assistant', content: reply });
-
-  } catch (err) {
-    const ti = document.getElementById('typingIndicator');
-    if (ti) ti.remove();
-    const errDiv = document.createElement('div');
-    errDiv.style.cssText = 'background:var(--red-bg);padding:10px 14px;border-radius:12px;font-size:12px;color:var(--red);align-self:flex-start;';
-    errDiv.textContent = 'Bağlantı hatası. Tekrar deneyin.';
-    box.appendChild(errDiv);
-    box.scrollTop = box.scrollHeight;
-  } finally {
-    if (sendBtn) sendBtn.disabled = false;
-    input.focus();
-  }
+  }, 1000);
 }
-
-// Enter tuşu — chat input
-const chatInput = document.getElementById('chatInput');
-if (chatInput) {
-  chatInput.addEventListener('keydown', e => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChatMessage(); }
-  });
-}
-// ── AI CHAT SONU ──────────────────────────────────────────────────────────────
 
 window.render = function(d){
   if(d.rival_url) {
@@ -276,7 +220,7 @@ window.render = function(d){
   document.getElementById('rUrl').textContent=d.site_url;
   const p=d.genel_puan,cl=pCl(p);
   document.getElementById('scC').className='sccirc '+scCl(p);
-  document.getElementById('scN').textContent=p;
+  document.getElementById('scN').innerHTML=`${p}<span class="scd">/100</span>`;
   const l=document.getElementById('scL');l.textContent=pLb(p);l.className='slbl '+cl;
   renderH(d.guvenlik_basliklari);
   renderM(d.performans);
@@ -296,24 +240,62 @@ window.render = function(d){
 function renderH(h){
   if(!h)return;
   const map=[
-    {k:'csp',n:'Content-Security-Policy'},
-    {k:'hsts',n:'Strict-Transport-Security'},
-    {k:'x_frame',n:'X-Frame-Options'},
-    {k:'x_content_type',n:'X-Content-Type-Options'},
-    {k:'referrer_policy',n:'Referrer-Policy'},
-    {k:'permissions_policy',n:'Permissions-Policy'},
+    {k:'csp',n:'Content-Security-Policy', icon: 'shield-check'},
+    {k:'hsts',n:'Strict-Transport-Security', icon: 'lock'},
+    {k:'x_frame',n:'X-Frame-Options', icon: 'frame'},
+    {k:'x_content_type',n:'X-Content-Type-Options', icon: 'file-type'},
+    {k:'referrer_policy',n:'Referrer-Policy', icon: 'navigation'},
+    {k:'permissions_policy',n:'Permissions-Policy', icon: 'key'},
   ];
   const g=document.getElementById('hGrid');g.innerHTML='';
-  map.forEach(({k,n})=>{
+  
+  // Remediation box for AI advice
+  const remBox = document.createElement('div');
+  remBox.id = 'securityRemediation';
+  remBox.className = 'remediation-box';
+  
+  map.forEach(({k,n,icon})=>{
     const it=h[k]||{durum:'yok',aciklama:''};
-    const sm={var:{c:'hok',t:'VAR',i:'✓'},yok:{c:'hmiss',t:'YOK',i:'✗'},eksik:{c:'hwarn',t:'EKSİK',i:'!'}};
+    const sm={
+      var:{c:'hok',t:'GÜVENLİ',i:'shield-check', bg:'var(--green-bg)', ic:'var(--green)'},
+      yok:{c:'hmiss',t:'KRİTİK',i:'shield-alert', bg:'var(--red-bg)', ic:'var(--red)'},
+      eksik:{c:'hwarn',t:'UYARI',i:'shield-question', bg:'var(--yellow-bg)', ic:'var(--yellow)'}
+    };
     const s=sm[it.durum]||sm.yok;
-    const ic=it.durum==='var'?'var(--green)':it.durum==='eksik'?'var(--yellow)':'var(--red)';
+    
     const d=document.createElement('div');
-    d.className='hitem';d.title=it.aciklama||'';
-    d.innerHTML=`<span class="hico" style="color:${ic}">${s.i}</span><span class="hnm">${n}</span><span class="hst ${s.c}">${s.t}</span>`;
+    d.className='hitem';
+    d.innerHTML=`
+      <div class="hico-big" style="background:${s.bg}; color:${s.ic}">
+        <i data-lucide="${s.i}"></i>
+      </div>
+      <div class="hnm">${n}</div>
+      <div class="hdesc">${it.aciklama || 'Güvenlik yapılandırması kontrol edildi.'}</div>
+      <span class="hst ${s.c}">${s.t}</span>
+    `;
+    
+    d.onclick = (e) => {
+      e.stopPropagation();
+      document.querySelectorAll('.hitem').forEach(item => item.classList.remove('on'));
+      d.classList.add('on');
+      
+      remBox.innerHTML = `
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px; color:var(--accent2); font-weight:700;">
+          <i data-lucide="sparkles" style="width:18px;"></i> AI Çözüm Rehberi: ${n}
+        </div>
+        <div style="font-size:13px; color:var(--text2); line-height:1.6;">
+          ${it.remediation || `Bu güvenlik başlığının eksikliği sitenizi çeşitli saldırılara açık hale getirebilir. PRO plana geçerek sitenize özel ${n} yapılandırma kodunu alabilirsiniz.`}
+        </div>
+      `;
+      remBox.classList.add('on');
+      if(window.lucide) window.lucide.createIcons();
+      // Insert remBox after the current row in grid (simplified: append to grid but use CSS grid-column: 1/-1)
+    };
+    
     g.appendChild(d);
   });
+  g.appendChild(remBox);
+  if(window.lucide) window.lucide.createIcons();
 }
 
 function renderM(p){
@@ -356,10 +338,13 @@ window.renderRadar = function(cats) {
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
   if(radarChart) radarChart.destroy();
+  
   const labels = cats.map(c => c.ad);
   const data = cats.map(c => c.puan);
+  
   const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
   const color = isDark ? '#10B981' : '#059669';
+  
   radarChart = new Chart(ctx, {
     type: 'radar',
     data: {
@@ -376,7 +361,8 @@ window.renderRadar = function(cats) {
     options: {
       scales: {
         r: {
-          beginAtZero: true, max: 100,
+          beginAtZero: true,
+          max: 100,
           grid: { color: isDark ? '#334155' : '#E2E8F0' },
           angleLines: { color: isDark ? '#334155' : '#E2E8F0' },
           pointLabels: { color: isDark ? '#94A3B8' : '#64748B', font: { size: 10, family: 'Syne' } }
@@ -485,9 +471,11 @@ window.startCompare = async function(){
   const u1 = normUrl(document.getElementById('urlIn1').value);
   const u2 = normUrl(document.getElementById('urlIn2').value);
   if(!u1 || !u2){showE('Lütfen iki geçerli adres girin.'); return;}
+  
   const btn = document.getElementById('btnCompare');
   btn.disabled = true;
   btn.textContent = 'Kıyaslanıyor...';
+  
   start(u1, u2);
 }
 
@@ -510,25 +498,35 @@ window.sendReport = async function(){
   const email = document.getElementById('emailIn').value;
   if(!email){ alert('Lütfen geçerli bir e-posta adresi girin.'); return; }
   if(!D){ alert('Önce analiz yapmalısınız.'); return; }
+  
   const btn = document.getElementById('btnSend');
   btn.disabled = true; btn.textContent = 'Gönderiliyor...';
+  
   try {
+    // PDF'i oluştur ve base64 al
     const doc = await genPDF();
     if(!doc) throw new Error("PDF oluşturulamadı");
     const pdfBase64 = doc.output('datauristring').split(',')[1];
+
     const r = await fetch('/api/send-email', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ email, domain: D.site_url, pdfBase64: pdfBase64 })
+      body: JSON.stringify({ 
+        email, 
+        domain: D.site_url,
+        score: D.genel_puan,
+        pdfBase64: pdfBase64
+      })
     });
+    
     const res = await r.json();
     if (res.error) throw new Error(res.error);
     alert('Rapor başarıyla gönderildi!');
-  } catch(e) {
+  } catch(e) { 
     console.error(e);
-    alert('Hata: ' + e.message);
+    alert('Hata: ' + e.message); 
   } finally {
-    btn.disabled = false;
+    btn.disabled = false; 
     btn.textContent = 'Raporu Gönder';
   }
 }
@@ -537,6 +535,7 @@ window.renderTech = function(t, g){
   const grid = document.getElementById('techGrid'); if (!grid) return;
   grid.innerHTML = '';
   if(!t) return;
+  
   const items = [
     {n: 'Framework', v: t.framework || 'Tespit Edilemedi', s: 'Altyapı'},
     {n: 'Sunucu Lokasyonu', v: t.ip_lokasyon || 'Bilinmiyor', s: 'Hosting'},
@@ -545,6 +544,7 @@ window.renderTech = function(t, g){
     {n: 'DNS (A)', v: (t.dns?.a || []).join(', ') || 'Yok', s: 'IP Adresleri'},
     {n: 'Cookie Güvenliği', v: g?.cookie_security || 'Riskli', c: g?.cookie_security==='Güvenli'?'hok':'hwarn'}
   ];
+  
   items.forEach(it => {
     const d = document.createElement('div');
     d.className = 'hitem';
@@ -584,39 +584,75 @@ window.genPDF = async function(download = true){
   const doc = new jsPDF();
   const b = document.getElementById('btnPdf');
   if (download) b.innerHTML = '<span class="spin"></span> Hazırlanıyor...';
+
   try {
-    doc.setFontSize(22); doc.setTextColor(16, 185, 129);
-    doc.text('Site Sağlık Raporu', 20, 20);
-    doc.setFontSize(10); doc.setTextColor(100);
+    // Logo / Header
+    doc.setFillColor(15, 23, 42); // Dark background for header
+    doc.rect(0, 0, 210, 40, 'F');
+    
+    doc.setFontSize(24);
+    doc.setTextColor(16, 185, 129);
+    doc.text('site', 20, 25);
+    doc.setTextColor(52, 211, 153);
+    doc.text('sağlık', 36, 25);
+    doc.setTextColor(255, 255, 255);
+    doc.text('.analiz', 58, 25);
+    
+    doc.setFontSize(10);
+    doc.setTextColor(148, 163, 184);
+    doc.text('TEKNİK SAĞLIK RAPORU', 20, 33);
+    
+    doc.setFontSize(10);
+    doc.setTextColor(100);
     doc.text(new Date().toLocaleString('tr-TR'), 150, 20);
-    doc.setDrawColor(200); doc.line(20, 25, 190, 25);
-    doc.setFontSize(16); doc.setTextColor(0);
+    
+    doc.setDrawColor(200);
+    doc.line(20, 25, 190, 25);
+    
+    doc.setFontSize(16);
+    doc.setTextColor(0);
     doc.text(`Firma: ${D.firma_adi}`, 20, 40);
     doc.text(`URL: ${D.site_url}`, 20, 50);
+    
     doc.setFontSize(30);
-    doc.setTextColor(D.genel_puan>=80?16:D.genel_puan>=60?245:239, D.genel_puan>=80?185:D.genel_puan>=60?158:68, D.genel_puan>=80?129:D.genel_puan>=60?11:68);
+    doc.setTextColor(D.genel_puan >= 80 ? 16 : D.genel_puan >= 60 ? 245 : 239, D.genel_puan >= 80 ? 185 : D.genel_puan >= 60 ? 158 : 68, D.genel_puan >= 80 ? 129 : D.genel_puan >= 60 ? 11 : 68);
     doc.text(`${D.genel_puan}/100`, 150, 45);
-    doc.setFontSize(12); doc.setTextColor(50);
+    
+    doc.setFontSize(12);
+    doc.setTextColor(50);
     const splitText = doc.splitTextToSize(D.ozet_metin, 170);
     doc.text(splitText, 20, 65);
+    
     let y = 75 + (splitText.length * 5);
-    doc.setFontSize(14); doc.setTextColor(0);
+    
+    // SSL
+    doc.setFontSize(14);
+    doc.setTextColor(0);
     doc.text('Güvenlik ve SSL', 20, y);
     doc.setFontSize(10);
     doc.text(`SSL Durumu: ${D.ssl_detay?.gecerli ? 'Geçerli' : 'Geçersiz'}`, 25, y + 7);
     doc.text(`Yayıncı: ${D.ssl_detay?.yayinci}`, 25, y + 12);
     y += 25;
+    
+    // Eksikler
     if (D.kurumsal_eksikler && D.kurumsal_eksikler.length) {
-      doc.setFontSize(14); doc.text('Kurumsal Eksikler', 20, y);
+      doc.setFontSize(14);
+      doc.text('Kurumsal Eksikler', 20, y);
       doc.setFontSize(10);
-      D.kurumsal_eksikler.forEach((e, i) => { doc.text(`• ${e}`, 25, y + 7 + (i * 5)); });
+      D.kurumsal_eksikler.forEach((e, i) => {
+        doc.text(`• ${e}`, 25, y + 7 + (i * 5));
+      });
       y += 15 + (D.kurumsal_eksikler.length * 5);
     }
-    doc.setFontSize(14); doc.text('Öncelikli Aksiyonlar', 20, y);
+    
+    // Öncelikler
+    doc.setFontSize(14);
+    doc.text('Öncelikli Aksiyonlar', 20, y);
     doc.setFontSize(10);
     D.oncelikler.slice(0, 5).forEach((o, i) => {
       doc.text(`${i+1}. [${o.oncelik}] ${o.is} (${o.etki})`, 25, y + 7 + (i * 5));
     });
+
     if (download) doc.save(`site-saglik-raporu-${D.site_url}.pdf`);
     return doc;
   } catch (err) {
@@ -628,13 +664,6 @@ window.genPDF = async function(download = true){
 }
 
 window.reset = function(){
-  // Chat geçmişini temizle
-  chatHistory = [];
-  const box = document.getElementById('chatBox');
-  if (box) {
-    box.innerHTML = '<div style="background:var(--surface2);padding:10px;border-radius:10px;font-size:13px;align-self:flex-start;max-width:85%;">Merhaba! Ben AI Danışmanınız. Analiz sonuçlarınız hakkında ne sormak istersiniz?</div>';
-  }
-
   document.getElementById('res').classList.remove('on');
   ['cGrid','dPanels','priList','hGrid','mGrid','tRow'].forEach(id=>{
     const el = document.getElementById(id);
