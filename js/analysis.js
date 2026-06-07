@@ -240,24 +240,61 @@ window.render = function(d){
 function renderH(h){
   if(!h)return;
   const map=[
-    {k:'csp',n:'Content-Security-Policy'},
-    {k:'hsts',n:'Strict-Transport-Security'},
-    {k:'x_frame',n:'X-Frame-Options'},
-    {k:'x_content_type',n:'X-Content-Type-Options'},
-    {k:'referrer_policy',n:'Referrer-Policy'},
-    {k:'permissions_policy',n:'Permissions-Policy'},
+    {k:'csp',n:'Content-Security-Policy', i:'shield-check'},
+    {k:'hsts',n:'Strict-Transport-Security', i:'lock'},
+    {k:'x_frame',n:'X-Frame-Options', i:'layout'},
+    {k:'x_content_type',n:'X-Content-Type-Options', i:'file-type'},
+    {k:'referrer_policy',n:'Referrer-Policy', i:'navigation'},
+    {k:'permissions_policy',n:'Permissions-Policy', i:'key'},
   ];
-  const g=document.getElementById('hGrid');g.innerHTML='';
-  map.forEach(({k,n})=>{
+  const g=document.getElementById('hGrid');
+  if(!g) return;
+  g.innerHTML='';
+
+  // Create remediation box if not exists
+  let rb = document.getElementById('hRemediation');
+  if(!rb) {
+    rb = document.createElement('div');
+    rb.id = 'hRemediation';
+    rb.className = 'remediation-box';
+    g.parentNode.insertBefore(rb, g.nextSibling);
+  } else {
+    rb.style.display = 'none';
+  }
+
+  map.forEach(({k,n,i})=>{
     const it=h[k]||{durum:'yok',aciklama:''};
-    const sm={var:{c:'hok',t:'VAR',i:'✓'},yok:{c:'hmiss',t:'YOK',i:'✗'},eksik:{c:'hwarn',t:'EKSİK',i:'!'}};
+    const sm={var:{c:'hok',t:'VAR'},yok:{c:'hmiss',t:'YOK'},eksik:{c:'hwarn',t:'EKSİK'}};
     const s=sm[it.durum]||sm.yok;
     const ic=it.durum==='var'?'var(--green)':it.durum==='eksik'?'var(--yellow)':'var(--red)';
+
     const d=document.createElement('div');
-    d.className='hitem';d.title=it.aciklama||'';
-    d.innerHTML=`<span class="hico" style="color:${ic}">${s.i}</span><span class="hnm">${n}</span><span class="hst ${s.c}">${s.t}</span>`;
+    d.className='hitem';
+    d.innerHTML=`
+      <div class="hico" style="color:${ic}"><i data-lucide="${i}"></i></div>
+      <span class="hnm">${n}</span>
+      <span class="hst ${s.c}">${s.t}</span>
+    `;
+
+    d.onclick = () => {
+      rb.innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+          <h4 style="font-family:var(--fd); color:var(--accent2);">${n}</h4>
+          <span class="hst ${s.c}">${s.t}</span>
+        </div>
+        <p style="font-size:13px; color:var(--text2); line-height:1.6;">${it.aciklama}</p>
+        <div style="margin-top:15px; padding-top:15px; border-top:1px solid var(--border);">
+          <div class="ilbl">AI Tavsiyesi</div>
+          <div style="font-size:12px; color:var(--text3);">${it.durum === 'var' ? 'Tebrikler, bu başlık doğru şekilde yapılandırılmış. Ek bir işlem gerekmiyor.' : 'Bu başlığın eksik olması güvenlik risklerini artırır. Sunucu tarafında bu başlığı ekleyerek koruma sağlayın.'}</div>
+        </div>
+      `;
+      rb.style.display = 'block';
+      rb.scrollIntoView({behavior:'smooth', block:'nearest'});
+    };
+
     g.appendChild(d);
   });
+  lucide.createIcons();
 }
 
 function renderM(p){
