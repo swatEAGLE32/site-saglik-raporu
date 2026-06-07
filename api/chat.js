@@ -69,7 +69,6 @@ ${reportContext ? `\n## MEVCUT ANALİZ RAPORU:\n${reportContext}` : '\n## Henüz
       messages.push({ role: h.role, content: h.content });
     });
   }
-
   // Yeni mesajı ekle
   messages.push({ role: 'user', content: message });
 
