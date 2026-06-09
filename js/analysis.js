@@ -220,7 +220,7 @@ window.render = function(d){
   document.getElementById('rUrl').textContent=d.site_url;
   const p=d.genel_puan,cl=pCl(p);
   document.getElementById('scC').className='sccirc '+scCl(p);
-  document.getElementById('scN').innerHTML=`${p}<span class="scd">/100</span>`;
+  document.getElementById('scN').textContent=p;
   const l=document.getElementById('scL');l.textContent=pLb(p);l.className='slbl '+cl;
   renderH(d.guvenlik_basliklari);
   renderM(d.performans);
@@ -240,62 +240,61 @@ window.render = function(d){
 function renderH(h){
   if(!h)return;
   const map=[
-    {k:'csp',n:'Content-Security-Policy', icon: 'shield-check'},
-    {k:'hsts',n:'Strict-Transport-Security', icon: 'lock'},
-    {k:'x_frame',n:'X-Frame-Options', icon: 'frame'},
-    {k:'x_content_type',n:'X-Content-Type-Options', icon: 'file-type'},
-    {k:'referrer_policy',n:'Referrer-Policy', icon: 'navigation'},
-    {k:'permissions_policy',n:'Permissions-Policy', icon: 'key'},
+    {k:'csp',n:'Content-Security-Policy', i:'shield-check'},
+    {k:'hsts',n:'Strict-Transport-Security', i:'lock'},
+    {k:'x_frame',n:'X-Frame-Options', i:'layout'},
+    {k:'x_content_type',n:'X-Content-Type-Options', i:'file-type'},
+    {k:'referrer_policy',n:'Referrer-Policy', i:'navigation'},
+    {k:'permissions_policy',n:'Permissions-Policy', i:'key'},
   ];
-  const g=document.getElementById('hGrid');g.innerHTML='';
+  const g=document.getElementById('hGrid');
+  if(!g) return;
+  g.innerHTML='';
   
-  // Remediation box for AI advice
-  const remBox = document.createElement('div');
-  remBox.id = 'securityRemediation';
-  remBox.className = 'remediation-box';
-  
-  map.forEach(({k,n,icon})=>{
+  // Create remediation box if not exists
+  let rb = document.getElementById('hRemediation');
+  if(!rb) {
+    rb = document.createElement('div');
+    rb.id = 'hRemediation';
+    rb.className = 'remediation-box';
+    g.parentNode.insertBefore(rb, g.nextSibling);
+  } else {
+    rb.style.display = 'none';
+  }
+
+  map.forEach(({k,n,i})=>{
     const it=h[k]||{durum:'yok',aciklama:''};
-    const sm={
-      var:{c:'hok',t:'GÜVENLİ',i:'shield-check', bg:'var(--green-bg)', ic:'var(--green)'},
-      yok:{c:'hmiss',t:'KRİTİK',i:'shield-alert', bg:'var(--red-bg)', ic:'var(--red)'},
-      eksik:{c:'hwarn',t:'UYARI',i:'shield-question', bg:'var(--yellow-bg)', ic:'var(--yellow)'}
-    };
+    const sm={var:{c:'hok',t:'VAR'},yok:{c:'hmiss',t:'YOK'},eksik:{c:'hwarn',t:'EKSİK'}};
     const s=sm[it.durum]||sm.yok;
+    const ic=it.durum==='var'?'var(--green)':it.durum==='eksik'?'var(--yellow)':'var(--red)';
     
     const d=document.createElement('div');
     d.className='hitem';
     d.innerHTML=`
-      <div class="hico-big" style="background:${s.bg}; color:${s.ic}">
-        <i data-lucide="${s.i}"></i>
-      </div>
-      <div class="hnm">${n}</div>
-      <div class="hdesc">${it.aciklama || 'Güvenlik yapılandırması kontrol edildi.'}</div>
+      <div class="hico" style="color:${ic}"><i data-lucide="${i}"></i></div>
+      <span class="hnm">${n}</span>
       <span class="hst ${s.c}">${s.t}</span>
     `;
     
-    d.onclick = (e) => {
-      e.stopPropagation();
-      document.querySelectorAll('.hitem').forEach(item => item.classList.remove('on'));
-      d.classList.add('on');
-      
-      remBox.innerHTML = `
-        <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px; color:var(--accent2); font-weight:700;">
-          <i data-lucide="sparkles" style="width:18px;"></i> AI Çözüm Rehberi: ${n}
+    d.onclick = () => {
+      rb.innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+          <h4 style="font-family:var(--fd); color:var(--accent2);">${n}</h4>
+          <span class="hst ${s.c}">${s.t}</span>
         </div>
-        <div style="font-size:13px; color:var(--text2); line-height:1.6;">
-          ${it.remediation || `Bu güvenlik başlığının eksikliği sitenizi çeşitli saldırılara açık hale getirebilir. PRO plana geçerek sitenize özel ${n} yapılandırma kodunu alabilirsiniz.`}
+        <p style="font-size:13px; color:var(--text2); line-height:1.6;">${it.aciklama}</p>
+        <div style="margin-top:15px; padding-top:15px; border-top:1px solid var(--border);">
+          <div class="ilbl">AI Tavsiyesi</div>
+          <div style="font-size:12px; color:var(--text3);">${it.durum === 'var' ? 'Tebrikler, bu başlık doğru şekilde yapılandırılmış. Ek bir işlem gerekmiyor.' : 'Bu başlığın eksik olması güvenlik risklerini artırır. Sunucu tarafında bu başlığı ekleyerek koruma sağlayın.'}</div>
         </div>
       `;
-      remBox.classList.add('on');
-      if(window.lucide) window.lucide.createIcons();
-      // Insert remBox after the current row in grid (simplified: append to grid but use CSS grid-column: 1/-1)
+      rb.style.display = 'block';
+      rb.scrollIntoView({behavior:'smooth', block:'nearest'});
     };
     
     g.appendChild(d);
   });
-  g.appendChild(remBox);
-  if(window.lucide) window.lucide.createIcons();
+  lucide.createIcons();
 }
 
 function renderM(p){
@@ -514,7 +513,6 @@ window.sendReport = async function(){
       body: JSON.stringify({ 
         email, 
         domain: D.site_url,
-        score: D.genel_puan,
         pdfBase64: pdfBase64
       })
     });
@@ -586,21 +584,9 @@ window.genPDF = async function(download = true){
   if (download) b.innerHTML = '<span class="spin"></span> Hazırlanıyor...';
 
   try {
-    // Logo / Header
-    doc.setFillColor(15, 23, 42); // Dark background for header
-    doc.rect(0, 0, 210, 40, 'F');
-    
-    doc.setFontSize(24);
-    doc.setTextColor(16, 185, 129);
-    doc.text('site', 20, 25);
-    doc.setTextColor(52, 211, 153);
-    doc.text('sağlık', 36, 25);
-    doc.setTextColor(255, 255, 255);
-    doc.text('.analiz', 58, 25);
-    
-    doc.setFontSize(10);
-    doc.setTextColor(148, 163, 184);
-    doc.text('TEKNİK SAĞLIK RAPORU', 20, 33);
+    doc.setFontSize(22);
+    doc.setTextColor(16, 185, 129); // Accent color
+    doc.text('Site Sağlık Raporu', 20, 20);
     
     doc.setFontSize(10);
     doc.setTextColor(100);
