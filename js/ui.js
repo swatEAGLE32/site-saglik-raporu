@@ -53,7 +53,6 @@ window.showView = function(view) {
   });
   
   if(view === 'history') fetchHistory();
-  if(view === 'dashboard') fetchDashboardStats();
   if(window.innerWidth < 1024) toggleSidebar(false);
   
   // Lucide icons update
